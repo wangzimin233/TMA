@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --color-app: #0b0e12;
+  --color-base: #171a21;
+  --color-base2: #101810;
+  --color-panel: #1b1f25;
+  --color-card: #142018;
+  --color-nav: #152019;
+  --color-soft: #26302b;
+  --color-soft2: #2f3934;
+  --color-line: #3b4d42;
+  --color-ink: #e4eee8;
+  --color-muted: #b9c6bd;
+  --color-brand: #2fbe85;
+  --color-danger: #f6475d;
+  --font-sans: "Inter", "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  --font-mono: "Roboto Mono", "SFMono-Regular", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #0b0e12;
+  color: #e4eee8;
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.crypto-grid {
+  background-image:
+    linear-gradient(rgba(47, 190, 133, 0.4) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 190, 133, 0.4) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: radial-gradient(circle at 65% 45%, #000, transparent 62%);
+}
+
+.chart-grid {
+  background-image:
+    linear-gradient(rgba(59, 77, 66, 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 77, 66, 0.5) 1px, transparent 1px);
+  background-size: 100px 72px;
+}
