@@ -1097,6 +1097,26 @@ docs/assets/reference-trade-order.png
 docs/assets/reference-trade-chart.png
 ```
 
+截图5：主题按钮颜色参考
+
+```text
+docs/assets/reference-theme-buttons.png
+```
+
+主题色：
+
+```text
+买入 / 做多绿色：#2FBE85
+
+卖出 / 做空红色：#F6475D
+
+主背景参考：#171A21
+
+深层背景参考：#0B0E12
+
+辅助灰蓝：#4F5867
+```
+
 ---
 
 ## 当前项目阶段
