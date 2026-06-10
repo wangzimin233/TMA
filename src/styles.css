@@ -1,19 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  --color-app: #0b0e12;
-  --color-base: #171a21;
-  --color-base2: #101810;
-  --color-panel: #1b1f25;
-  --color-card: #142018;
-  --color-nav: #152019;
-  --color-soft: #26302b;
-  --color-soft2: #2f3934;
-  --color-line: #3b4d42;
-  --color-ink: #e4eee8;
-  --color-muted: #b9c6bd;
+  --color-app: #080c13;
+  --color-base: #171d27;
+  --color-base2: #1f2632;
+  --color-panel: #1a202b;
+  --color-card: #1b2330;
+  --color-nav: #121923;
+  --color-soft: #252d38;
+  --color-soft2: #2b3440;
+  --color-line: #3c4656;
+  --color-ink: #e6edf5;
+  --color-muted: #8b96a8;
   --color-brand: #2fbe85;
   --color-danger: #f6475d;
+  --color-warning: #f0b90b;
   --font-sans: "Inter", "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
   --font-mono: "Roboto Mono", "SFMono-Regular", ui-monospace, monospace;
 }
@@ -26,10 +27,16 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #0b0e12;
-  color: #e4eee8;
+  overflow-x: hidden;
+  background: #080c13;
+  color: #e6edf5;
   font-family: var(--font-sans);
   letter-spacing: 0;
+}
+
+#root {
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 button,
@@ -55,7 +62,7 @@ button {
 
 .chart-grid {
   background-image:
-    linear-gradient(rgba(59, 77, 66, 0.5) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(59, 77, 66, 0.5) 1px, transparent 1px);
+    linear-gradient(rgba(60, 70, 86, 0.48) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(60, 70, 86, 0.48) 1px, transparent 1px);
   background-size: 100px 72px;
 }

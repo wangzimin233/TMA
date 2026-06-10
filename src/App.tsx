@@ -34,7 +34,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-app text-ink">
-      <main className="mx-auto min-h-screen w-full max-w-[430px] overflow-hidden bg-base pb-24 shadow-2xl shadow-black/40">
+      <main className="mx-auto min-h-screen w-full min-w-0 max-w-[430px] overflow-hidden bg-base pb-[calc(68px+env(safe-area-inset-bottom))] shadow-2xl shadow-black/35 max-[480px]:shadow-none">
         {screen}
         <BottomNav active={activeTab} onChange={setActiveTab} />
       </main>

@@ -1,6 +1,9 @@
-import { Bell, CandlestickChart, ChevronDown, FileText, Menu, Star, WalletCards } from 'lucide-react';
-import { asks, bids, candleData, contractAsks, contractBids } from '../../data/mock';
+import { useEffect, useRef, useState } from 'react';
+import { Bell, Calculator, CandlestickChart, ChevronDown, FileText, Info, Menu, Star, WalletCards } from 'lucide-react';
+import { CandlestickSeries, ColorType, createChart, type UTCTimestamp } from 'lightweight-charts';
+import { asks, bids, contractAsks, contractBids, marketRows } from '../../data/mock';
 import { CoinDot } from '../../components/CoinDot';
+import { useTradeStore } from '../../store/trade.store';
 import type { TradeMode } from '../../types/app';
 
 type TradePageProps = {
@@ -12,50 +15,53 @@ type TradePageProps = {
 };
 
 export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage }: TradePageProps) {
+  const currentSymbol = useTradeStore((state) => state.currentSymbol);
+  const ticker = getTicker(currentSymbol);
+
   if (showChart) {
-    return <ChartTradePage mode={mode} setMode={setMode} closeChart={() => setShowChart(false)} openLeverage={openLeverage} />;
+    return <ChartTradePage mode={mode} setMode={setMode} symbol={currentSymbol} ticker={ticker} closeChart={() => setShowChart(false)} openLeverage={openLeverage} />;
   }
 
   return (
     <section>
       <TradeTop mode={mode} setMode={setMode} />
-      <div className="border-b border-line px-4 py-4">
+      <div className="border-b border-line px-4 py-2.5">
         <div className="flex items-center justify-between">
-          <button className="flex items-center gap-2 text-xl font-bold">
-            <CoinDot /> BTC/USDT <ChevronDown className="size-4" />
+          <button className="flex items-center gap-2 text-[0.95rem] font-semibold">
+            <CoinDot /> {currentSymbol} <ChevronDown className="size-4" />
           </button>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3.5">
             <button aria-label="收藏交易对">
-              <Star className="size-7 fill-[#F59E0B] text-[#F59E0B]" />
+              <Star className="size-5 fill-[#F59E0B] text-[#F59E0B]" />
             </button>
             <button aria-label="打开K线图" onClick={() => setShowChart(true)}>
-              <CandlestickChart className="size-7 text-brand" />
+              <CandlestickChart className="size-5 text-brand" />
             </button>
           </div>
         </div>
-        <p className="mt-4 font-mono text-[42px] font-bold text-brand">{mode === 'contract' ? '64,230.50' : '61,700.00'}</p>
-        <p className="font-mono text-lg text-muted">
-          ≈$61,647.09 <span className="text-danger">-2.35% -1484.64</span>
+        <p className={`mt-2.5 font-mono text-[1.6rem] font-bold leading-none tabular-nums ${ticker.change >= 0 ? 'text-brand' : 'text-danger'}`}>{mode === 'contract' ? ticker.price : ticker.spotPrice}</p>
+        <p className="mt-1.5 font-mono text-[0.78rem] text-muted tabular-nums">
+          ≈{ticker.fiat} <span className={ticker.change >= 0 ? 'text-brand' : 'text-danger'}>{ticker.changeText} {ticker.delta}</span>
         </p>
       </div>
-      {mode === 'contract' ? <ContractTradeForm openLeverage={openLeverage} /> : <SpotTradeForm compact />}
+      <BinanceOrderPanel mode={mode} symbol={currentSymbol} openLeverage={openLeverage} />
     </section>
   );
 }
 
 function TradeTop({ mode, setMode }: { mode: TradeMode; setMode: (mode: TradeMode) => void }) {
   return (
-    <header className="flex h-[58px] items-center justify-between border-b border-line px-4">
-      <Menu className="size-7 text-muted" />
-      <div className="rounded-lg bg-soft p-1">
-        <button className={`rounded-md px-8 py-2 text-lg ${mode === 'spot' ? 'bg-base text-ink' : 'text-muted'}`} onClick={() => setMode('spot')}>
+    <header className="flex h-11 items-center justify-between border-b border-line px-4">
+      <Menu className="size-5 text-muted" />
+      <div className="rounded-md bg-[#202733] p-0.5">
+        <button className={`rounded px-6 py-1.5 text-[0.86rem] outline-none transition-colors ${mode === 'spot' ? 'bg-[#111821] text-ink' : 'text-muted'}`} onClick={() => setMode('spot')}>
           现货
         </button>
-        <button className={`rounded-md px-8 py-2 text-lg ${mode === 'contract' ? 'bg-soft2 text-ink' : 'text-muted'}`} onClick={() => setMode('contract')}>
+        <button className={`rounded px-6 py-1.5 text-[0.86rem] outline-none transition-colors ${mode === 'contract' ? 'bg-[#111821] text-ink' : 'text-muted'}`} onClick={() => setMode('contract')}>
           合约
         </button>
       </div>
-      <Bell className="size-6 text-muted" />
+      <Bell className="size-5 text-muted" />
     </header>
   );
 }
@@ -63,39 +69,48 @@ function TradeTop({ mode, setMode }: { mode: TradeMode; setMode: (mode: TradeMod
 function ChartTradePage({
   mode,
   setMode,
+  symbol,
+  ticker,
   closeChart,
   openLeverage,
 }: {
   mode: TradeMode;
   setMode: (mode: TradeMode) => void;
+  symbol: string;
+  ticker: ReturnType<typeof getTicker>;
   closeChart: () => void;
   openLeverage: () => void;
 }) {
+  const base = symbol.split('/')[0] ?? 'BTC';
+  const currentInterval = useTradeStore((state) => state.currentInterval);
+  const setCurrentInterval = useTradeStore((state) => state.setCurrentInterval);
+  const intervals = ['15分', '30分', '1小时', '4小时', '1日', '周线'];
+
   return (
     <section>
       <TradeTop mode={mode} setMode={setMode} />
-      <div className="border-b border-line px-4 py-4">
+      <div className="border-b border-line px-4 py-2.5">
         <div className="flex items-center justify-between">
-          <button className="flex items-center gap-2 text-xl font-bold" onClick={closeChart}>
-            <CoinDot /> BTC/USDT <ChevronDown className="size-4" />
+          <button className="flex items-center gap-2 text-[1rem] font-semibold" onClick={closeChart}>
+            <CoinDot /> {symbol} <ChevronDown className="size-4" />
           </button>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3.5">
             <button aria-label="收藏交易对">
-              <Star className="size-7 fill-[#F59E0B] text-[#F59E0B]" />
+              <Star className="size-5 fill-[#F59E0B] text-[#F59E0B]" />
             </button>
             <button aria-label={mode === 'contract' ? '调整杠杆' : '返回下单'} onClick={mode === 'contract' ? openLeverage : closeChart}>
-              <CandlestickChart className="size-7 text-brand" />
+              <CandlestickChart className="size-5 text-brand" />
             </button>
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-[1fr_1fr] gap-4">
+        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
           <div>
-            <p className="font-mono text-[40px] font-bold text-brand">{mode === 'contract' ? '64,230.50' : '62,167.03'}</p>
-            <p className="font-mono text-sm text-muted">
-              ≈$61,117.35 <span className="text-brand">+0.13% +81.29</span>
+            <p className={`font-mono text-[1.45rem] font-bold leading-none tabular-nums ${ticker.change >= 0 ? 'text-brand' : 'text-danger'}`}>{mode === 'contract' ? ticker.price : ticker.spotPrice}</p>
+            <p className="mt-1.5 font-mono text-[0.72rem] text-muted tabular-nums">
+              ≈{ticker.fiat} <span className={ticker.change >= 0 ? 'text-brand' : 'text-danger'}>{ticker.changeText} {ticker.delta}</span>
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-right text-xs text-muted">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-right text-[0.68rem] text-muted">
             <Stat label="24h最高" value="62,453.33" />
             <Stat label="24h量(BTC)" value="5,936.97" />
             <Stat label="24h最低" value="60,727.6" />
@@ -104,20 +119,30 @@ function ChartTradePage({
         </div>
       </div>
       <div className="border-b border-line">
-        <div className="flex gap-8 px-4 py-3 text-lg">
-          <button className="border-b-2 border-brand pb-2 text-brand">图表</button>
+        <div className="flex gap-8 px-4 py-2 text-[0.9rem]">
+          <button className="border-b-2 border-brand pb-1.5 text-brand">图表</button>
           <button className="text-muted">币种概况</button>
         </div>
-        <div className="flex items-center justify-between bg-base2 px-4 py-3 text-sm text-muted">
-          {['15分', '30分', '1小时', '4小时', '1日', '周线'].map((item, index) => (
-            <button key={item} className={index === 0 ? 'rounded-full bg-soft2 px-4 py-2 text-ink' : ''}>
+        <div className="flex items-center justify-between bg-base2 px-4 py-2 text-[0.75rem] text-muted">
+          {intervals.map((item) => (
+            <button key={item} className={currentInterval === item ? 'rounded bg-soft2 px-2.5 py-1.5 text-ink' : ''} onClick={() => setCurrentInterval(item)}>
               {item}
             </button>
           ))}
         </div>
       </div>
       <CandleChart />
-      {mode === 'contract' ? <ContractTradeForm openLeverage={openLeverage} condensed /> : <SpotTradeForm />}
+      <div className="grid grid-cols-2 gap-2.5 px-4 py-3">
+        <button className="rounded bg-brand py-2.5 text-[0.9rem] font-semibold text-white" onClick={closeChart}>
+          买入
+        </button>
+        <button className="rounded border border-danger bg-soft2 py-2.5 text-[0.9rem] font-semibold text-danger" onClick={closeChart}>
+          卖出
+        </button>
+      </div>
+      <div className="px-4 pb-24">
+        <OrderBook base={base} contract={mode === 'contract'} />
+      </div>
     </section>
   );
 }
@@ -126,182 +151,327 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p>{label}</p>
-      <p className="font-mono text-sm text-ink">{value}</p>
+      <p className="font-mono text-[0.78rem] text-ink tabular-nums">{value}</p>
     </div>
   );
 }
 
 function CandleChart() {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const chart = createChart(containerRef.current, {
+      autoSize: true,
+      layout: {
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: '#8b96a8',
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: 'rgba(60, 70, 86, 0.45)' },
+        horzLines: { color: 'rgba(60, 70, 86, 0.45)' },
+      },
+      rightPriceScale: {
+        borderVisible: false,
+        scaleMargins: { top: 0.12, bottom: 0.12 },
+      },
+      timeScale: {
+        borderVisible: false,
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: {
+        vertLine: { color: 'rgba(139,150,168,.35)' },
+        horzLine: { color: 'rgba(139,150,168,.35)' },
+      },
+    });
+
+    const series = chart.addSeries(CandlestickSeries, {
+      upColor: '#2fbe85',
+      downColor: '#f6475d',
+      borderVisible: false,
+      wickUpColor: '#2fbe85',
+      wickDownColor: '#f6475d',
+      priceLineColor: '#f6475d',
+      priceLineWidth: 1,
+      lastValueVisible: true,
+      priceLineVisible: true,
+    });
+
+    series.setData(makeCandleData());
+    chart.timeScale().fitContent();
+
+    return () => chart.remove();
+  }, []);
+
   return (
-    <div className="relative h-[270px] border-b border-line bg-base">
-      <div className="absolute inset-0 chart-grid" />
-      <div className="absolute inset-x-4 bottom-8 top-8 flex items-end gap-2">
-        {candleData.map((height, index) => {
-          const green = index % 3 !== 0;
-          return (
-            <span key={index} className="relative flex flex-1 items-end justify-center">
-              <span className={`absolute w-px ${green ? 'bg-brand' : 'bg-danger'}`} style={{ bottom: index % 2 ? 8 : 0, height: `${height + 28}px` }} />
-              <span className={`z-10 w-full max-w-[10px] ${green ? 'bg-brand' : 'bg-danger'}`} style={{ height: `${height}px` }} />
-            </span>
-          );
-        })}
-      </div>
-      <span className="absolute bottom-16 right-0 rounded-l bg-danger px-2 py-1 font-mono text-xs text-white">61,101.57</span>
+    <div className="h-[260px] border-b border-line bg-base">
+      <div ref={containerRef} className="h-full w-full" />
     </div>
   );
 }
 
-function SpotTradeForm({ compact = false }: { compact?: boolean }) {
+function BinanceOrderPanel({ mode, symbol, openLeverage }: { mode: TradeMode; symbol: string; openLeverage: () => void }) {
+  const base = symbol.split('/')[0] ?? 'BTC';
+  const isContract = mode === 'contract';
+
   return (
-    <div className={`${compact ? 'px-4 py-5' : 'grid grid-cols-[minmax(0,1fr)_132px] gap-3 px-4 py-5'}`}>
-      <div>
-        <BuySellTabs />
-        <OrderInputs />
-        <button className="mt-5 w-full rounded bg-brand py-4 text-lg font-bold text-white">买入 BTC</button>
+    <div className="px-4 py-3.5">
+      <div className="mb-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-8 text-[1rem] font-semibold">
+          <button className="relative pb-2 text-ink after:absolute after:bottom-0 after:left-1 after:h-[3px] after:w-7 after:bg-warning">限价</button>
+          <button className="pb-2 text-muted">市价</button>
+        </div>
+        <Info className="size-5 text-muted" />
       </div>
-      {!compact && <OrderBook />}
+
+      <div className="mb-3.5 flex items-center justify-between text-[0.92rem] text-muted">
+        <span>可用 -- USDT</span>
+        <button className="text-[1.05rem] leading-none text-warning">⇆</button>
+      </div>
+
+      <div className="mb-2.5 flex items-end justify-between">
+        <span className="text-[0.82rem] text-muted">委托价格</span>
+        <Calculator className="size-4.5 text-muted" />
+      </div>
+
+      <div className="mb-3 grid grid-cols-[minmax(0,1fr)_52px] gap-2">
+        <TradeInput value="62,077.7" suffix="USDT" compact emphasis />
+        <button className="rounded-lg border border-line bg-base2 text-[0.82rem] font-semibold text-ink transition-colors active:bg-soft">BBO</button>
+      </div>
+
+      <label className="mb-2 block text-[0.82rem] text-muted">数量</label>
+      <TradeInput placeholder="" suffix={base} dropdown compact />
+      <PercentRail />
+
+      <div className="my-3.5 border-t border-line" />
+
+      {isContract && (
+        <div className="mb-3.5 space-y-3">
+          <CheckRow label="止盈/止损" />
+          <div className="flex items-center justify-between">
+            <CheckRow label="只减仓" />
+            <button className="flex items-center gap-1 text-[0.84rem] text-muted">
+              生效时间 <span className="text-ink">GTC</span> <ChevronDown className="size-4" />
+            </button>
+          </div>
+          <button className="rounded border border-line px-3 py-1.5 text-[0.8rem] text-brand" onClick={openLeverage}>
+            全仓 | 10x
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <button className="rounded-lg bg-brand py-3 text-[1rem] font-semibold text-white transition active:brightness-90">{isContract ? '买入/做多' : `买入 ${base}`}</button>
+        <button className="rounded-lg bg-danger py-3 text-[1rem] font-semibold text-white transition active:brightness-90">{isContract ? '卖出/做空' : `卖出 ${base}`}</button>
+      </div>
+
+      {isContract ? (
+        <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[0.78rem]">
+          <Metric label="强平价格" value="-- USDT" />
+          <Metric label="强平价格" value="-- USDT" />
+          <Metric label="保证金" value="0.00 USDT" />
+          <Metric label="保证金" value="0.00 USDT" />
+          <Metric label="可开" value={`0.000 ${base}`} />
+          <Metric label="可开" value={`0.000 ${base}`} />
+        </div>
+      ) : (
+        <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[0.78rem]">
+          <Metric label="可用" value="-- USDT" />
+          <Metric label="可用" value={`-- ${base}`} />
+          <Metric label="预计买入" value={`0.000 ${base}`} />
+          <Metric label="预计卖出" value="0.00 USDT" />
+        </div>
+      )}
+
       <CurrentOrders />
     </div>
   );
 }
 
-function ContractTradeForm({ openLeverage, condensed = false }: { openLeverage: () => void; condensed?: boolean }) {
+function TradeInput({
+  value = '',
+  placeholder,
+  suffix,
+  dropdown = false,
+  large = false,
+  compact = false,
+  emphasis = false,
+}: {
+  value?: string;
+  placeholder?: string;
+  suffix: string;
+  dropdown?: boolean;
+  large?: boolean;
+  compact?: boolean;
+  emphasis?: boolean;
+}) {
+  const heightClass = compact ? 'h-[3.25rem]' : 'h-[3.95rem]';
+  const inputSizeClass = compact ? `${emphasis ? 'text-[1.14rem]' : 'text-[1.05rem]'} font-semibold` : large ? 'text-[1.35rem] font-semibold' : 'text-[1rem]';
+  const suffixSizeClass = compact ? 'text-[0.84rem]' : 'text-[0.92rem]';
+
   return (
-    <div className={`${condensed ? 'grid grid-cols-[minmax(0,1fr)_132px] gap-3 px-4 py-5' : 'px-4 py-5'}`}>
-      <div>
-        {!condensed && (
-          <button className="mb-4 rounded border border-line px-4 py-2 text-sm text-brand" onClick={openLeverage}>
-            全仓 | 10x
-          </button>
-        )}
-        <div className="mb-4 grid grid-cols-2 rounded border border-line p-1">
-          <button className="rounded bg-soft2 py-3">开仓</button>
-          <button className="py-3 text-muted">平仓</button>
-        </div>
-        <button className="mb-3 flex w-full items-center justify-between text-left text-sm text-muted" onClick={openLeverage}>
-          限价委托 <ChevronDown className="size-4" />
-        </button>
-        <OrderInputs contract />
-        <div className="mt-5 flex flex-col gap-3">
-          <button className="rounded bg-brand py-4 text-lg font-bold text-white">买入/做多</button>
-          <button className="rounded bg-danger py-4 text-lg font-bold text-white">卖出/做空</button>
-        </div>
+    <div className={`flex ${heightClass} min-w-0 items-center rounded-lg border border-line bg-base2 px-4`}>
+      <input
+        className={`min-w-0 flex-1 bg-transparent font-mono text-ink outline-none placeholder:text-muted tabular-nums ${inputSizeClass}`}
+        value={value}
+        placeholder={placeholder}
+        readOnly
+      />
+      <span className={`flex items-center gap-1 font-semibold text-ink ${suffixSizeClass}`}>
+        {suffix}
+        {dropdown && <ChevronDown className="size-4 text-muted" />}
+      </span>
+    </div>
+  );
+}
+
+function PercentRail() {
+  return (
+    <div className="my-4 px-4">
+      <div className="relative h-px bg-line">
+        {[0, 25, 50, 75, 100].map((point, index) => (
+          <span
+            key={point}
+            className={`absolute top-1/2 border border-line bg-base2 ${index === 0 ? 'size-3.5 border-ink' : 'size-2'}`}
+            style={{ left: `${point}%`, transform: `translateX(-50%) translateY(-50%) rotate(45deg)` }}
+          />
+        ))}
       </div>
-      {condensed ? (
-        <OrderBook contract />
-      ) : (
-        <>
-          <OrderBook contract />
-          <CurrentOrders />
-        </>
-      )}
     </div>
   );
 }
 
-function BuySellTabs() {
+function CheckRow({ label }: { label: string }) {
+  const [checked, setChecked] = useState(false);
+
   return (
-    <div className="mb-5 grid grid-cols-2 gap-3">
-      <button className="rounded bg-brand py-3 text-lg font-bold text-white">买入</button>
-      <button className="rounded bg-soft2 py-3 text-lg font-bold text-ink">卖出</button>
-    </div>
+    <label className="flex items-center gap-2.5 text-[0.96rem] text-ink">
+      <input className="sr-only" type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} />
+      <span className={`grid size-[1.15rem] place-items-center rounded border ${checked ? 'border-brand bg-brand' : 'border-line bg-base2'}`}>
+        {checked && <span className="size-2 rounded-full bg-white" />}
+      </span>
+      {label}
+    </label>
   );
 }
 
-function OrderInputs({ contract = false }: { contract?: boolean }) {
+function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="mb-4 flex gap-5 text-sm">
-        <button className="border-b-2 border-brand pb-2 text-ink">限价</button>
-        <button className="pb-2 text-muted">市价</button>
-      </div>
-      <InputBox value={contract ? '64230.50' : '61549.99'} suffix="USDT" stepper />
-      <InputBox value="" placeholder="数量" suffix="BTC" />
-      <div className="my-5">
-        <div className="relative h-1 rounded bg-line">
-          <span className="absolute left-0 top-1/2 size-4 -translate-y-1/2 rounded-full bg-brand" />
-          <span className="absolute left-1/4 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-line bg-base" />
-          <span className="absolute left-1/2 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-line bg-base" />
-          <span className="absolute left-3/4 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-line bg-base" />
-          <span className="absolute right-0 top-1/2 size-4 -translate-y-1/2 rounded-full border-2 border-line bg-base" />
-        </div>
-        <div className="mt-3 flex justify-between text-xs text-muted">
-          {['0%', '25%', '50%', '75%', '100%'].map((item) => (
-            <span key={item}>{item}</span>
-          ))}
-        </div>
-      </div>
-      <InputBox value="" placeholder={contract ? '数量' : '合计'} suffix={contract ? '' : 'USDT'} />
-      <div className="mt-4 flex justify-between text-sm text-muted">
-        <span>可用</span>
-        <span className="font-mono text-ink">{contract ? '12,450.00' : '0.0000'} USDT</span>
-      </div>
+      <p className="text-muted">{label} <span className="text-ink tabular-nums">{value}</span></p>
     </div>
   );
 }
 
-function InputBox({ value, placeholder, suffix, stepper }: { value: string; placeholder?: string; suffix?: string; stepper?: boolean }) {
-  return (
-    <div className="mb-4 flex h-12 min-w-0 items-center rounded border border-line bg-base2">
-      <input className="min-w-0 flex-1 bg-transparent px-4 font-mono text-base outline-none placeholder:text-muted" value={value} placeholder={placeholder} readOnly />
-      {suffix && <span className="px-2 text-xs text-muted">{suffix}</span>}
-      {stepper && (
-        <span className="grid h-full w-8 shrink-0 place-items-center border-l border-line text-lg text-muted">
-          ＋<span className="-mt-3 block">−</span>
-        </span>
-      )}
-    </div>
-  );
-}
-
-function OrderBook({ contract = false }: { contract?: boolean }) {
+function OrderBook({ base = 'BTC', contract = false }: { base?: string; contract?: boolean }) {
   const sellRows = contract ? contractAsks : asks;
   const buyRows = contract ? contractBids : bids;
+  const maxAmount = Math.max(...sellRows.concat(buyRows).map(([, amount]) => Number(amount.replace(/,/g, ''))));
 
   return (
     <div className="min-w-0">
-      <div className="mb-3 flex gap-3 text-base">
-        <button className="border-b-2 border-brand pb-1">盘口</button>
-        <button className="text-muted">最新成交</button>
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex gap-3 text-[0.84rem]">
+          <button className="border-b-2 border-brand pb-1">盘口</button>
+          <button className="text-muted">最新成交</button>
+        </div>
+        <button className="rounded border border-line px-1.5 py-0.5 text-[0.68rem] text-muted">0.1</button>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-[11px] text-muted">
+      <div className="grid grid-cols-2 gap-2 px-1 text-[0.68rem] text-muted">
         <span>价(USDT)</span>
-        <span className="text-right">量(BTC)</span>
+        <span className="text-right">量({base})</span>
       </div>
-      <div className="mt-2 space-y-2 font-mono">
+      <div className="mt-1.5 space-y-0.5 font-mono">
         {sellRows.map(([price, amount]) => (
-          <div key={price} className="grid grid-cols-2 text-[12px]">
-            <span className="text-danger">{price}</span>
-            <span className="text-right">{amount}</span>
-          </div>
+          <DepthRow key={price} price={price} amount={amount} maxAmount={maxAmount} side="sell" />
         ))}
       </div>
-      <div className="my-4 font-mono text-[22px] font-bold text-brand">{contract ? '64,230.50' : '61,700.00'}</div>
-      <div className="space-y-2 font-mono">
+      <div className="my-2.5 flex items-baseline justify-between border-y border-line/70 py-2">
+        <span className="font-mono text-[1.06rem] font-bold text-brand tabular-nums">{contract ? '64,230.50' : '61,700.00'}</span>
+        <span className="font-mono text-[0.72rem] text-muted tabular-nums">≈ $61,700.00</span>
+      </div>
+      <div className="space-y-0.5 font-mono">
         {buyRows.map(([price, amount]) => (
-          <div key={price} className="grid grid-cols-2 text-[12px]">
-            <span className="text-brand">{price}</span>
-            <span className="text-right">{amount}</span>
-          </div>
+          <DepthRow key={price} price={price} amount={amount} maxAmount={maxAmount} side="buy" />
         ))}
       </div>
     </div>
   );
+}
+
+function DepthRow({ price, amount, maxAmount, side }: { price: string; amount: string; maxAmount: number; side: 'buy' | 'sell' }) {
+  const numericAmount = Number(amount.replace(/,/g, ''));
+  const width = maxAmount > 0 ? Math.max(12, Math.min(100, (numericAmount / maxAmount) * 100)) : 0;
+  const depthColor = side === 'buy' ? 'bg-brand/8' : 'bg-danger/8';
+  const textColor = side === 'buy' ? 'text-brand' : 'text-danger';
+
+  return (
+    <div className="relative grid h-5 grid-cols-2 items-center overflow-hidden px-1 text-[0.72rem] tabular-nums">
+      <span className={`absolute inset-y-0 right-0 ${depthColor}`} style={{ width: `${width}%` }} />
+      <span className={`relative ${textColor}`}>{price}</span>
+      <span className="relative text-right text-ink">{amount}</span>
+    </div>
+  );
+}
+
+function getTicker(symbol: string) {
+  const row = marketRows.find((item) => item.symbol === symbol);
+  const price = row?.price ?? '61,700.00';
+  const fiat = row?.fiat ?? '$61,647.09';
+  const change = row?.change ?? -2.35;
+  const absDelta = symbol.startsWith('BTC') ? '1484.64' : symbol.startsWith('ETH') ? '39.33' : '8.20';
+
+  return {
+    price,
+    spotPrice: price,
+    fiat,
+    change,
+    changeText: `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`,
+    delta: `${change >= 0 ? '+' : '-'}${absDelta}`,
+  };
 }
 
 function CurrentOrders() {
   return (
-    <div className="col-span-full -mx-4 mt-8 border-t border-line px-4 py-6">
+    <div className="col-span-full -mx-4 mt-5 border-t border-line px-4 py-3.5">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">当前委托</h2>
-        <FileText className="size-6 text-muted" />
+        <div className="flex gap-4 text-[0.9rem] font-semibold">
+          <button className="text-ink">当前委托</button>
+          <button className="text-muted">历史委托</button>
+        </div>
+        <FileText className="size-4.5 text-muted" />
       </div>
-      <div className="grid min-h-[150px] place-items-center text-muted">
+      <div className="grid min-h-[70px] place-items-center text-muted">
         <div className="text-center">
-          <WalletCards className="mx-auto mb-2 size-10" />
-          <p>暂无订单</p>
+          <WalletCards className="mx-auto mb-1.5 size-6" />
+          <p className="text-[0.78rem]">暂无订单</p>
         </div>
       </div>
     </div>
   );
+}
+
+function makeCandleData() {
+  const baseTime = 1760000000;
+  const closes = [
+    61720, 61620, 61780, 61860, 62080, 62140, 62020, 61710, 61750, 61820, 61680, 61520,
+    61360, 61470, 61590, 61340, 61260, 61420, 61550, 61640, 61780, 61620, 61720, 61685,
+  ];
+
+  return closes.map((close, index) => {
+    const open = index === 0 ? 61760 : closes[index - 1];
+    const high = Math.max(open, close) + 70 + (index % 4) * 22;
+    const low = Math.min(open, close) - 75 - (index % 3) * 18;
+
+    return {
+      time: (baseTime + index * 900) as UTCTimestamp,
+      open,
+      high,
+      low,
+      close,
+    };
+  });
 }
