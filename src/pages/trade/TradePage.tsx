@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Calculator, CandlestickChart, ChevronDown, FileText, Info, Menu, Search, Star, WalletCards, X } from 'lucide-react';
+import { Bell, Calculator, CandlestickChart, ChevronDown, FileText, Info, Search, Star, WalletCards, X } from 'lucide-react';
 import { CandlestickSeries, ColorType, createChart, type UTCTimestamp } from 'lightweight-charts';
 import { getTickerBySymbol, marketPairs } from '../../data/mock';
 import { CoinDot } from '../../components/CoinDot';
@@ -76,7 +76,7 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
 function TradeTop({ mode, setMode }: { mode: TradeMode; setMode: (mode: TradeMode) => void }) {
   return (
     <header className="flex h-11 items-center justify-between border-b border-line px-4">
-      <Menu className="size-5 text-muted-foreground" />
+      <span className="size-5" />
       <div className="rounded-md bg-[#202733] p-0.5">
         <button className={`rounded px-6 py-1.5 text-[0.86rem] outline-none transition-colors ${mode === 'spot' ? 'bg-[#111821] text-ink' : 'text-muted-foreground'}`} onClick={() => setMode('spot')}>
           现货
