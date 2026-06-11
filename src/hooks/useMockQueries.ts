@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { getMockAssets, getMockHomeMarkets, getMockMarketRows } from '../services/mock.service';
+import {
+  getMockAssets,
+  getMockDepositNetworks,
+  getMockDepositRecords,
+  getMockHomeMarkets,
+  getMockMarketRows,
+} from '../services/mock.service';
 
 export function useHomeMarkets() {
   return useQuery({
@@ -19,5 +25,19 @@ export function useUserAssets() {
   return useQuery({
     queryKey: ['mock', 'assets'],
     queryFn: getMockAssets,
+  });
+}
+
+export function useDepositNetworks() {
+  return useQuery({
+    queryKey: ['mock', 'depositNetworks'],
+    queryFn: getMockDepositNetworks,
+  });
+}
+
+export function useDepositRecords() {
+  return useQuery({
+    queryKey: ['mock', 'depositRecords'],
+    queryFn: getMockDepositRecords,
   });
 }

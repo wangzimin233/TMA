@@ -1,12 +1,28 @@
+import { useMemo, useState } from 'react';
 import { BrandHeader } from '../../components/BrandHeader';
 import { MarketLine } from '../../components/MarketLine';
 import { ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 import { quickActions } from '../../data/mock';
 import type { MarketPair } from '../../data/mock';
 import { useHomeMarkets, useUserAssets } from '../../hooks/useMockQueries';
 import { useTradeStore } from '../../store/trade.store';
 
-export function HomePage({ openTrade }: { openTrade: () => void }) {
+const homeMarketTabs = ['自选', '热门', '涨幅榜', '跌幅榜', '新币'] as const;
+const marketTypeFilters = ['全部', '现货', '合约'] as const;
+const spotMarketBases = ['BTC', 'ETH', 'BGB', 'XRP', 'SOL', 'BNB', 'DOGE', 'ADA'];
+const futuresMarketBases = ['BTC', 'ETH', 'SOL', 'DOGE', 'SUI', 'NEAR', 'OP', 'AVAX', 'LINK', 'ARB'];
+
+type HomeMarketTab = (typeof homeMarketTabs)[number];
+type MarketTypeFilter = (typeof marketTypeFilters)[number];
+
+export function HomePage({ openDeposit, openTrade }: { openDeposit: () => void; openTrade: () => void }) {
   const { data: marketPairs = [] } = useHomeMarkets();
   const { data: assets } = useUserAssets();
   const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
@@ -29,7 +45,7 @@ export function HomePage({ openTrade }: { openTrade: () => void }) {
               <button
                 key={action.label}
                 className="group flex min-w-0 flex-col items-center gap-1.5 text-center"
-                onClick={action.label === '合约' || action.label === '现货' ? openTrade : undefined}
+                onClick={action.label === '充值' ? openDeposit : action.label === '合约' || action.label === '现货' ? openTrade : undefined}
               >
                 <span className="relative grid size-9 place-items-center rounded-md border border-line bg-panel text-ink transition group-active:scale-95">
                   {action.hot && (
@@ -58,7 +74,7 @@ export function HomePage({ openTrade }: { openTrade: () => void }) {
             <button className="rounded border border-line px-2.5 py-1.5 text-[0.72rem] text-muted-foreground">资产</button>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
-            <button className="rounded bg-brand py-2 text-[0.82rem] font-semibold text-white">充值</button>
+            <button className="rounded bg-brand py-2 text-[0.82rem] font-semibold text-white" onClick={openDeposit}>充值</button>
             <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold">提现</button>
             <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold" onClick={openTrade}>交易</button>
           </div>
@@ -97,25 +113,88 @@ function CoinCard({ pair }: { pair: MarketPair }) {
 
 function MarketPreview({ openPair }: { openPair: (symbol: string) => void }) {
   const { data: marketPairs = [] } = useHomeMarkets();
+  const [activeTab, setActiveTab] = useState<HomeMarketTab>('自选');
+  const [marketType, setMarketType] = useState<MarketTypeFilter>('全部');
+  const displayedPairs = useMemo(() => {
+    const pairs = marketPairs.filter((pair) => {
+      if (marketType === '现货') return spotMarketBases.includes(pair.base);
+      if (marketType === '合约') return futuresMarketBases.includes(pair.base);
+      return true;
+    });
+
+    switch (activeTab) {
+      case '热门':
+        return [...pairs].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 5);
+      case '涨幅榜':
+        return [...pairs].sort((a, b) => b.change - a.change).slice(0, 5);
+      case '跌幅榜':
+        return [...pairs].sort((a, b) => a.change - b.change).slice(0, 5);
+      case '新币':
+        return [...pairs].reverse().slice(0, 5);
+      case '自选':
+      default:
+        return pairs.slice(0, 5);
+    }
+  }, [activeTab, marketPairs, marketType]);
 
   return (
     <div>
-      <div className="no-scrollbar -mx-4 flex gap-5 overflow-x-auto whitespace-nowrap border-b border-line px-4 pb-2.5 text-[0.86rem]">
-        {['自选', '热门', '涨幅榜', '跌幅榜', '新币'].map((item, index) => (
-          <button key={item} className={index === 0 ? 'shrink-0 font-bold text-ink' : 'shrink-0 text-muted-foreground'}>
+      <div
+        role="tablist"
+        aria-label="行情分类"
+        className="no-scrollbar -mx-4 flex gap-5 overflow-x-auto whitespace-nowrap border-b border-line px-4 text-[0.86rem]"
+      >
+        {homeMarketTabs.map((item) => (
+          <button
+            key={item}
+            role="tab"
+            type="button"
+            aria-selected={activeTab === item}
+            className={`relative shrink-0 py-2.5 font-semibold transition duration-150 active:scale-95 ${
+              activeTab === item ? 'text-ink' : 'text-muted-foreground hover:text-ink/85'
+            }`}
+            onClick={() => setActiveTab(item)}
+          >
             {item}
+            <span
+              className={`absolute inset-x-0 -bottom-px mx-auto h-0.5 rounded-full bg-brand transition-all duration-200 ${
+                activeTab === item ? 'w-full opacity-100' : 'w-0 opacity-0'
+              }`}
+            />
           </button>
         ))}
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(94px,1fr)_76px] px-1 py-2.5 text-[0.72rem] text-muted-foreground">
-        <span className="inline-flex items-center gap-0.5">
-          全部 <ChevronDown className="size-3" />
-        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="筛选市场类型"
+            className="group inline-flex w-fit items-center gap-0.5 rounded-sm outline-none transition active:scale-95 data-[state=open]:text-ink"
+          >
+            {marketType} <ChevronDown className="size-3 transition group-data-[state=open]:rotate-180" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            sideOffset={6}
+            className="min-w-[5.5rem] rounded-md border border-line bg-panel p-1 text-[0.76rem] text-ink shadow-lg shadow-app/40 ring-0"
+          >
+            <DropdownMenuRadioGroup value={marketType} onValueChange={(value) => setMarketType(value as MarketTypeFilter)}>
+              {marketTypeFilters.map((filter) => (
+                <DropdownMenuRadioItem
+                  key={filter}
+                  value={filter}
+                  className="h-7 rounded px-2 py-0 pr-7 text-[0.76rem] text-muted-foreground focus:bg-soft focus:text-ink data-[state=checked]:text-ink [&_svg]:size-3.5 [&_[data-slot=dropdown-menu-radio-item-indicator]]:right-2 [&_[data-slot=dropdown-menu-radio-item-indicator]]:text-brand"
+                >
+                  {filter}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <span className="text-right">最新价</span>
         <span className="text-right">24h涨跌</span>
       </div>
       <div>
-        {marketPairs.slice(0, 5).map((pair) => (
+        {displayedPairs.map((pair) => (
           <button key={pair.symbol} className="block w-full text-left" onClick={() => openPair(pair.symbol)}>
             <MarketLine pair={pair} />
           </button>

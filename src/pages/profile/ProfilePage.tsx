@@ -1,7 +1,7 @@
 import { Bell, ChevronDown, Copy, FileText, Globe2, Home, Shield, User, WalletCards } from 'lucide-react';
 import { useUserAssets } from '../../hooks/useMockQueries';
 
-export function ProfilePage() {
+export function ProfilePage({ openDeposit }: { openDeposit: () => void }) {
   const { data: assets } = useUserAssets();
   const items = [
     { label: '资金记录', icon: WalletCards },
@@ -37,7 +37,7 @@ export function ProfilePage() {
         </div>
         <p className="mt-1.5 font-mono text-[0.82rem] text-muted-foreground tabular-nums">≈ {assets?.btcEstimate ?? '0.6432'} BTC</p>
         <div className="mt-4 grid grid-cols-2 gap-2.5">
-          <button className="rounded bg-brand py-2.5 text-[0.92rem] font-semibold text-white">充币</button>
+          <button className="rounded bg-brand py-2.5 text-[0.92rem] font-semibold text-white" onClick={openDeposit}>充币</button>
           <button className="rounded border border-line bg-base2 py-2.5 text-[0.92rem] font-semibold">提币</button>
         </div>
       </div>
