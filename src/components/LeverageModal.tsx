@@ -11,7 +11,7 @@ export function LeverageModal({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between border-b border-line px-6 py-5">
           <h2 className="text-xl">调整杠杆</h2>
           <button onClick={onClose}>
-            <X className="size-7 text-muted" />
+            <X className="size-7 text-muted-foreground" />
           </button>
         </div>
         <div className="space-y-7 p-6">
@@ -28,7 +28,7 @@ export function LeverageModal({ onClose }: { onClose: () => void }) {
             value={lev}
             onChange={(event) => setLev(Number(event.target.value))}
           />
-          <div className="flex justify-between text-sm text-muted">
+          <div className="flex justify-between text-sm text-muted-foreground">
             {['1x', '25x', '50x', '100x', '150x'].map((item) => (
               <span key={item}>{item}</span>
             ))}

@@ -39,7 +39,7 @@ export function HomePage({ openTrade }: { openTrade: () => void }) {
                   )}
                   <Icon className="size-[1.05rem]" />
                 </span>
-                <span className="max-w-full truncate text-[0.74rem] text-muted">{action.label}</span>
+                <span className="max-w-full truncate text-[0.74rem] text-muted-foreground">{action.label}</span>
               </button>
             );
           })}
@@ -48,14 +48,14 @@ export function HomePage({ openTrade }: { openTrade: () => void }) {
         <div className="rounded-md border border-line bg-panel px-4 py-3.5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[0.72rem] text-muted">总资产折算</p>
+              <p className="text-[0.72rem] text-muted-foreground">总资产折算</p>
               <div className="mt-1.5 flex items-end gap-2">
                 <span className="font-mono text-[1.45rem] font-bold leading-none tabular-nums">${assets?.totalBalance ?? '45,231.89'}</span>
                 <span className="pb-0.5 font-mono text-[0.76rem] text-brand tabular-nums">+{assets?.changePercent ?? 2.4}%</span>
               </div>
-              <p className="mt-1 font-mono text-[0.72rem] text-muted tabular-nums">≈ {assets?.btcEstimate ?? '0.6432'} BTC</p>
+              <p className="mt-1 font-mono text-[0.72rem] text-muted-foreground tabular-nums">≈ {assets?.btcEstimate ?? '0.6432'} BTC</p>
             </div>
-            <button className="rounded border border-line px-2.5 py-1.5 text-[0.72rem] text-muted">资产</button>
+            <button className="rounded border border-line px-2.5 py-1.5 text-[0.72rem] text-muted-foreground">资产</button>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
             <button className="rounded bg-brand py-2 text-[0.82rem] font-semibold text-white">充值</button>
@@ -87,7 +87,7 @@ function CoinCard({ pair }: { pair: MarketPair }) {
         </span>
         <span className="truncate text-[0.92rem] font-semibold">{pair.base}</span>
       </div>
-      <p className="mt-2.5 truncate font-mono text-[0.78rem] text-muted tabular-nums">{pair.fiat}</p>
+      <p className="mt-2.5 truncate font-mono text-[0.78rem] text-muted-foreground tabular-nums">{pair.fiat}</p>
       <p className={`mt-1.5 font-mono text-[0.82rem] tabular-nums ${pair.change >= 0 ? 'text-brand' : 'text-danger'}`}>
         ↙ {Math.abs(pair.change).toFixed(2)}%
       </p>
@@ -100,14 +100,14 @@ function MarketPreview({ openPair }: { openPair: (symbol: string) => void }) {
 
   return (
     <div>
-      <div className="flex gap-5 border-b border-line pb-2.5 text-[0.78rem]">
+      <div className="no-scrollbar -mx-4 flex gap-5 overflow-x-auto whitespace-nowrap border-b border-line px-4 pb-2.5 text-[0.86rem]">
         {['自选', '热门', '涨幅榜', '跌幅榜', '新币'].map((item, index) => (
-          <button key={item} className={index === 0 ? 'font-bold text-ink' : 'text-muted'}>
+          <button key={item} className={index === 0 ? 'shrink-0 font-bold text-ink' : 'shrink-0 text-muted-foreground'}>
             {item}
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(94px,1fr)_76px] px-1 py-2.5 text-[0.72rem] text-muted">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(94px,1fr)_76px] px-1 py-2.5 text-[0.72rem] text-muted-foreground">
         <span className="inline-flex items-center gap-0.5">
           全部 <ChevronDown className="size-3" />
         </span>

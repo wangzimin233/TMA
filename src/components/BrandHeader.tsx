@@ -7,7 +7,7 @@ export function BrandHeader() {
         <div className="grid size-6 place-items-center rounded-full border-2 border-brand text-[0.75rem] font-black leading-none text-brand">S</div>
         <span className="text-[1.08rem] font-bold">CryptoTrade</span>
       </div>
-      <Bell className="size-5 text-muted" />
+      <Bell className="size-5 text-muted-foreground" />
     </header>
   );
 }

@@ -19,7 +19,7 @@ export function ProfilePage() {
           <div className="grid size-12 place-items-center rounded-lg border border-line bg-[radial-gradient(circle,#253449,#111821)] text-xl">👤</div>
           <div>
             <h1 className="text-[1.18rem] font-semibold">Trader_X99</h1>
-            <div className="mt-1.5 flex items-center gap-2 text-[0.72rem] text-muted">
+            <div className="mt-1.5 flex items-center gap-2 text-[0.72rem] text-muted-foreground">
               <span className="rounded bg-brand px-2 py-0.5 text-[0.68rem] font-semibold text-white">VIP 3</span>
               <span>UID: 8493201</span>
               <Copy className="size-3.5 text-brand" />
@@ -29,13 +29,13 @@ export function ProfilePage() {
       </div>
 
       <div className="border-b border-line py-4">
-        <p className="text-[0.72rem] text-muted">总资产折算</p>
+        <p className="text-[0.72rem] text-muted-foreground">总资产折算</p>
         <div className="mt-2.5 flex items-end gap-2">
           <span className="text-[1.15rem]">$</span>
           <span className="font-mono text-[1.42rem] font-bold leading-none tabular-nums">{assets?.totalBalance ?? '45,231.89'}</span>
           <span className="pb-0.5 font-mono text-[0.78rem] text-brand tabular-nums">+{assets?.changePercent ?? 2.4}%</span>
         </div>
-        <p className="mt-1.5 font-mono text-[0.82rem] text-muted tabular-nums">≈ {assets?.btcEstimate ?? '0.6432'} BTC</p>
+        <p className="mt-1.5 font-mono text-[0.82rem] text-muted-foreground tabular-nums">≈ {assets?.btcEstimate ?? '0.6432'} BTC</p>
         <div className="mt-4 grid grid-cols-2 gap-2.5">
           <button className="rounded bg-brand py-2.5 text-[0.92rem] font-semibold text-white">充币</button>
           <button className="rounded border border-line bg-base2 py-2.5 text-[0.92rem] font-semibold">提币</button>
@@ -59,7 +59,7 @@ export function ProfilePage() {
 }
 
 function SectionLabel({ children }: { children: string }) {
-  return <h2 className="mb-1.5 mt-4 text-[0.72rem] text-muted">{children}</h2>;
+  return <h2 className="mb-1.5 mt-4 text-[0.72rem] text-muted-foreground">{children}</h2>;
 }
 
 function ProfileRow({ label, icon: Icon, badge, value }: { label: string; icon: typeof Home; badge?: string; value?: string }) {
@@ -70,8 +70,8 @@ function ProfileRow({ label, icon: Icon, badge, value }: { label: string; icon: 
       </span>
       <span className="flex-1 text-[0.9rem]">{label}</span>
       {badge && <span className="rounded bg-[#B80F1B] px-2 py-0.5 text-[0.64rem] text-white">{badge}</span>}
-      {value && <span className="text-[0.78rem] text-muted">{value}</span>}
-      <ChevronDown className="size-4 -rotate-90 text-muted" />
+      {value && <span className="text-[0.78rem] text-muted-foreground">{value}</span>}
+      <ChevronDown className="size-4 -rotate-90 text-muted-foreground" />
     </button>
   );
 }

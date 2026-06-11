@@ -10,31 +10,31 @@ export function MarketPage({ openTrade }: { openTrade: () => void }) {
   return (
     <section>
       <header className="border-b border-line bg-panel px-4 pt-3">
-        <div className="flex h-8 items-start justify-between">
-          <div className="flex gap-6 text-[0.95rem] text-muted">
+        <div className="flex h-8 min-w-0 items-start justify-between gap-3">
+          <div className="no-scrollbar flex min-w-0 flex-1 gap-6 overflow-x-auto whitespace-nowrap text-[0.95rem] text-muted-foreground">
             {['自选', '现货', '合约', '榜单'].map((item) => (
               <button
                 key={item}
-                className={item === '现货' ? 'relative pb-2 text-brand after:absolute after:bottom-0 after:left-1/2 after:h-0.5 after:w-5 after:-translate-x-1/2 after:rounded-full after:bg-brand' : 'pb-2'}
+                className={item === '现货' ? 'relative shrink-0 pb-2 text-brand after:absolute after:bottom-0 after:left-1/2 after:h-0.5 after:w-5 after:-translate-x-1/2 after:rounded-full after:bg-brand' : 'shrink-0 pb-2'}
               >
                 {item}
               </button>
             ))}
           </div>
-          <Search className="size-6 text-muted" />
+          <Search className="size-6 shrink-0 text-muted-foreground" />
         </div>
-        <div className="mt-3.5 flex items-center justify-between text-[0.82rem] text-muted">
+        <div className="no-scrollbar -mx-4 mt-3.5 flex items-center gap-4 overflow-x-auto whitespace-nowrap px-4 text-[0.82rem] text-muted-foreground">
           {['全部', '热门', '涨幅榜', '跌幅榜', 'USDT'].map((item, index) => (
             <button
               key={item}
-              className={`inline-flex h-8 items-center justify-center ${index === 0 ? 'rounded bg-soft px-2.5 text-ink' : ''} ${item === 'USDT' ? 'min-w-[44px] justify-end' : ''}`}
+              className={`inline-flex h-8 shrink-0 items-center justify-center ${index === 0 ? 'rounded bg-soft px-2.5 text-ink' : ''}`}
             >
               {item}
-              {item === 'USDT' && <ChevronDown className="ml-0.5 size-3 translate-y-px" />}
+              {item === 'USDT' && <ChevronDown className="ml-0.5 size-3" />}
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(94px,1fr)_76px] py-2.5 text-[0.76rem] text-muted">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(94px,1fr)_76px] py-2.5 text-[0.76rem] text-muted-foreground">
           <span>名称</span>
           <span className="text-right">最新价</span>
           <span className="text-right">24H 涨跌</span>
@@ -53,11 +53,11 @@ export function MarketPage({ openTrade }: { openTrade: () => void }) {
           >
             <div>
               <p className="text-[0.95rem] font-medium">{row.symbol.replace('/', ' / ')}</p>
-              <p className="mt-1 text-[0.72rem] text-muted">Vol {row.volume}</p>
+              <p className="mt-1 text-[0.72rem] text-muted-foreground">Vol {row.volume}</p>
             </div>
             <div className="min-w-0 text-right">
               <p className={`font-mono text-[0.96rem] tabular-nums ${row.change >= 0 ? 'text-brand' : 'text-danger'}`}>{row.price}</p>
-              <p className="mt-1 font-mono text-[0.7rem] text-muted tabular-nums">{row.fiat}</p>
+              <p className="mt-1 font-mono text-[0.7rem] text-muted-foreground tabular-nums">{row.fiat}</p>
             </div>
             <span className={`ml-2 rounded px-1.5 py-1.5 text-center font-mono text-[0.78rem] font-semibold text-white tabular-nums ${row.change >= 0 ? 'bg-brand' : 'bg-danger'}`}>
               {row.change >= 0 ? '+' : ''}
