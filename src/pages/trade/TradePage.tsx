@@ -4,8 +4,13 @@ import { CandlestickSeries, ColorType, createChart, type UTCTimestamp } from 'li
 import { getTickerBySymbol, marketPairs } from '../../data/mock';
 import { CoinDot } from '../../components/CoinDot';
 import { Drawer, DrawerClose, DrawerContent, DrawerTitle } from '../../components/ui/drawer';
+import { Slider } from '../../components/ui/slider';
+import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { useTradeStore } from '../../store/trade.store';
 import type { TradeMode } from '../../types/app';
+
+type OrderType = 'limit' | 'market';
+type ContractPositionMode = 'open' | 'close';
 
 type TradePageProps = {
   mode: TradeMode;
@@ -242,66 +247,121 @@ function CandleChart() {
 function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: TradeMode; symbol: string; ticker: ReturnType<typeof getTicker>; openLeverage: () => void }) {
   const base = symbol.split('/')[0] ?? 'BTC';
   const isContract = mode === 'contract';
+  const [orderType, setOrderType] = useState<OrderType>('limit');
+  const [positionMode, setPositionMode] = useState<ContractPositionMode>('open');
+  const isLimitOrder = orderType === 'limit';
+  const marketPlaceholder = positionMode === 'open' ? '最优追价开仓' : '最优追价平仓';
+  const leftAction = isContract ? (positionMode === 'open' ? '买入开多' : '平空') : `买入 ${base}`;
+  const rightAction = isContract ? (positionMode === 'open' ? '卖出开空' : '平多') : `卖出 ${base}`;
+  const contractMetricLabel = positionMode === 'open' ? '可开' : '可平';
+  const showContractLimitMeta = isContract && isLimitOrder;
+
+  useEffect(() => {
+    setOrderType('limit');
+    setPositionMode('open');
+  }, [mode]);
 
   return (
     <div className="px-4 py-3.5">
+      {isContract && (
+        <Tabs value={positionMode} onValueChange={(value) => setPositionMode(value as ContractPositionMode)}>
+          <TabsList className="mb-3 grid h-12 w-full grid-cols-2 items-stretch gap-0 overflow-hidden rounded-lg bg-[#202733] p-0">
+            <TabsTrigger
+              value="open"
+              className="h-full min-h-0 rounded-none border-0 py-0 text-[0.92rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-brand data-[state=active]:text-white dark:data-[state=active]:bg-brand dark:data-[state=active]:text-white"
+            >
+              开仓
+            </TabsTrigger>
+            <TabsTrigger
+              value="close"
+              className="h-full min-h-0 rounded-none border-0 py-0 text-[0.92rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-danger data-[state=active]:text-white dark:data-[state=active]:bg-danger dark:data-[state=active]:text-white"
+            >
+              平仓
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
       <div className="mb-3.5 flex min-w-0 items-center justify-between gap-3">
-        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-8 overflow-x-auto whitespace-nowrap text-[1rem] font-semibold">
-          <button className="relative shrink-0 pb-2 text-ink after:absolute after:bottom-0 after:left-1 after:h-[3px] after:w-7 after:bg-warning">限价</button>
-          <button className="shrink-0 pb-2 text-muted-foreground">市价</button>
-        </div>
+        <Tabs className="min-w-0 flex-1" value={orderType} onValueChange={(value) => setOrderType(value as OrderType)}>
+          <TabsList variant="line" className="no-scrollbar flex h-auto min-w-0 justify-start gap-8 overflow-x-auto whitespace-nowrap p-0 text-[1rem] font-semibold">
+            <TabsTrigger
+              value="limit"
+              className="h-auto shrink-0 rounded-none px-0 pb-2 text-muted-foreground after:bg-warning data-[state=active]:text-ink data-[state=active]:after:opacity-100"
+            >
+              限价
+            </TabsTrigger>
+            <TabsTrigger
+              value="market"
+              className="h-auto shrink-0 rounded-none px-0 pb-2 text-muted-foreground after:bg-warning data-[state=active]:text-ink data-[state=active]:after:opacity-100"
+            >
+              市价
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <Info className="size-5 shrink-0 text-muted-foreground" />
       </div>
 
       <div className="mb-3.5 flex items-center justify-between text-[0.92rem] text-muted-foreground">
         <span>可用 -- USDT</span>
-        <button className="text-[1.05rem] leading-none text-warning">⇆</button>
       </div>
 
-      <div className="mb-2.5 flex items-end justify-between">
-        <span className="text-[0.82rem] text-muted-foreground">委托价格</span>
-        <Calculator className="size-4.5 text-muted-foreground" />
-      </div>
+      {isLimitOrder ? (
+        <>
+          <div className="mb-2.5 flex items-end justify-between">
+            <span className="text-[0.82rem] text-muted-foreground">委托价格</span>
+            <Calculator className="size-4.5 text-muted-foreground" />
+          </div>
 
-      <div className="mb-3 grid grid-cols-[minmax(0,1fr)_52px] gap-2">
-        <TradeInput value={ticker.price} suffix="USDT" compact emphasis />
-        <button className="rounded-lg border border-line bg-base2 text-[0.82rem] font-semibold text-ink transition-colors active:bg-soft">BBO</button>
-      </div>
+          <div className="mb-3">
+            <TradeInput value={ticker.price} suffix="USDT" compact emphasis />
+          </div>
+        </>
+      ) : (
+        <div className="mb-3 flex h-[3.25rem] items-center rounded-lg border border-transparent bg-soft px-4 text-[0.86rem] font-semibold text-muted-foreground/70">
+          {isContract ? marketPlaceholder : '按市场最优价格成交'}
+        </div>
+      )}
 
       <label className="mb-2 block text-[0.82rem] text-muted-foreground">数量</label>
       <TradeInput placeholder="" suffix={base} dropdown compact />
       <PercentRail />
 
-      <div className="my-3.5 border-t border-line" />
-
-      {isContract && (
-        <div className="mb-3.5 space-y-3">
-          <CheckRow label="止盈/止损" />
-          <div className="flex items-center justify-between">
-            <CheckRow label="只减仓" />
-            <button className="flex items-center gap-1 text-[0.84rem] text-muted-foreground">
-              生效时间 <span className="text-ink">GTC</span> <ChevronDown className="size-4" />
-            </button>
-          </div>
+      {showContractLimitMeta && (
+        <div className="mb-3.5 flex items-center justify-between border-t border-line pt-3">
+          <button className="flex items-center gap-1 text-[0.84rem] font-semibold text-muted-foreground">
+            生效时间 <span className="text-ink">GTC</span> <ChevronDown className="size-4" />
+          </button>
           <button className="rounded border border-line px-3 py-1.5 text-[0.8rem] text-brand" onClick={openLeverage}>
             全仓 | 10x
           </button>
         </div>
       )}
 
+      {isContract && (
+        <div className={`${showContractLimitMeta ? 'mb-3.5' : 'my-3.5 border-t border-line pt-3'} space-y-3`}>
+          <CheckRow label="止盈/止损" />
+          <CheckRow label={positionMode === 'open' ? '只减仓' : '仅平仓'} />
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2.5">
-        <button className="rounded-lg bg-brand py-3 text-[1rem] font-semibold text-white transition active:brightness-90">{isContract ? '买入/做多' : `买入 ${base}`}</button>
-        <button className="rounded-lg bg-danger py-3 text-[1rem] font-semibold text-white transition active:brightness-90">{isContract ? '卖出/做空' : `卖出 ${base}`}</button>
+        <button className="rounded-lg bg-brand py-3 text-[1rem] font-semibold text-white transition active:brightness-90">{leftAction}</button>
+        <button className="rounded-lg bg-danger py-3 text-[1rem] font-semibold text-white transition active:brightness-90">{rightAction}</button>
       </div>
 
       {isContract ? (
         <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[0.78rem]">
-          <Metric label="强平价格" value="-- USDT" />
-          <Metric label="强平价格" value="-- USDT" />
-          <Metric label="保证金" value="0.00 USDT" />
-          <Metric label="保证金" value="0.00 USDT" />
-          <Metric label="可开" value={`0.000 ${base}`} />
-          <Metric label="可开" value={`0.000 ${base}`} />
+          {positionMode === 'open' && (
+            <>
+              <Metric label="强平价格" value="-- USDT" />
+              <Metric label="强平价格" value="-- USDT" />
+              <Metric label="保证金" value="0.00 USDT" />
+              <Metric label="保证金" value="0.00 USDT" />
+            </>
+          )}
+          <Metric label={contractMetricLabel} value={`0.000 ${base}`} />
+          <Metric label={contractMetricLabel} value={`0.000 ${base}`} />
         </div>
       ) : (
         <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[0.78rem]">
@@ -355,16 +415,68 @@ function TradeInput({
 }
 
 function PercentRail() {
+  const [percent, setPercent] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const hideTimer = useRef<number | null>(null);
+  const points = [0, 25, 50, 75, 100];
+  const showTooltipNow = () => {
+    if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    setShowTooltip(true);
+  };
+  const hideTooltipSoon = () => {
+    if (hideTimer.current) window.clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => setShowTooltip(false), 700);
+  };
+
   return (
-    <div className="my-4 px-4">
-      <div className="relative h-px bg-line">
-        {[0, 25, 50, 75, 100].map((point, index) => (
+    <div className="mb-4 -mt-0.5">
+      <div className="relative h-[3rem] px-3">
+        {showTooltip && (
+          <div
+            className="absolute -top-[1.35rem] z-30 -translate-x-1/2 rounded-md bg-soft2 px-2.5 py-1.5 font-mono text-[0.78rem] font-semibold leading-none text-ink shadow-lg shadow-black/25 after:absolute after:left-1/2 after:top-full after:size-2 after:-translate-x-1/2 after:-translate-y-1/2 after:rotate-45 after:bg-soft2"
+            style={{ left: `calc(0.75rem + (100% - 1.5rem) * ${percent / 100})` }}
+          >
+            {percent}%
+          </div>
+        )}
+
+        <Slider
+          className="absolute inset-x-0 top-[0.34rem] z-20 h-5 px-3 [&_[data-slot=slider-range]]:bg-ink [&_[data-slot=slider-thumb]]:z-20 [&_[data-slot=slider-thumb]]:size-4 [&_[data-slot=slider-thumb]]:rotate-45 [&_[data-slot=slider-thumb]]:rounded-[4px] [&_[data-slot=slider-thumb]]:border-0 [&_[data-slot=slider-thumb]]:bg-ink [&_[data-slot=slider-thumb]]:ring-0 [&_[data-slot=slider-thumb]]:after:hidden [&_[data-slot=slider-track]]:h-px [&_[data-slot=slider-track]]:overflow-visible [&_[data-slot=slider-track]]:bg-line"
+          max={100}
+          min={0}
+          step={1}
+          value={[percent]}
+          onBlur={hideTooltipSoon}
+          onFocus={showTooltipNow}
+          onPointerDown={showTooltipNow}
+          onPointerUp={hideTooltipSoon}
+          onValueChange={(value) => {
+            setPercent(value[0] ?? 0);
+            showTooltipNow();
+          }}
+        />
+
+        {points.map((point) => (
           <span
             key={point}
-            className={`absolute top-1/2 border border-line bg-base2 ${index === 0 ? 'size-3.5 border-ink' : 'size-2'}`}
-            style={{ left: `${point}%`, transform: `translateX(-50%) translateY(-50%) rotate(45deg)` }}
+            className={`pointer-events-none absolute top-[0.97rem] z-10 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[2px] ${
+              point <= percent ? 'bg-ink' : 'bg-soft2'
+            }`}
+            style={{ left: `calc(0.75rem + (100% - 1.5rem) * ${point / 100})` }}
           />
         ))}
+
+        <div className="absolute inset-x-0 top-[2.12rem] text-[0.74rem] font-medium text-muted-foreground">
+          {points.map((point) => (
+            <span
+              key={point}
+              className="absolute -translate-x-1/2"
+              style={{ left: `calc(0.75rem + (100% - 1.5rem) * ${point / 100})` }}
+            >
+              {point}%
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -59,12 +59,12 @@ export function DepositPage({ onBack }: { onBack: () => void }) {
               setCopied(false);
             }}
           >
-            <TabsList className="grid h-auto w-full grid-cols-3 gap-2 rounded-md bg-base2 p-1">
+            <TabsList className="grid h-8 w-full grid-cols-3 items-stretch gap-0 overflow-hidden rounded-md border border-line bg-base2 p-[2px]">
               {networks.map((network) => (
                 <TabsTrigger
                   key={network.key}
                   value={network.key}
-                  className="h-8 rounded border-0 py-0 text-[0.78rem] font-semibold text-muted-foreground shadow-none transition active:scale-95 data-active:bg-brand data-active:text-[#06130e] dark:data-active:bg-brand dark:data-active:text-[#06130e]"
+                  className="h-full min-h-0 rounded-[5px] border-0 py-0 text-[0.78rem] font-semibold text-muted-foreground shadow-none transition after:hidden active:scale-95 data-[state=active]:bg-brand data-[state=active]:text-[#06130e] dark:data-[state=active]:bg-brand dark:data-[state=active]:text-[#06130e]"
                 >
                   {network.key}
                 </TabsTrigger>
