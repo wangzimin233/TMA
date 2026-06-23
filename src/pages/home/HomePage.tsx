@@ -26,11 +26,13 @@ export function HomePage({
   isLogin,
   openAuth,
   openDeposit,
+  openWithdraw,
   openTrade,
 }: {
   isLogin: boolean;
   openAuth: () => void;
   openDeposit: () => void;
+  openWithdraw: () => void;
   openTrade: () => void;
 }) {
   const { data: marketPairs = [] } = useHomeMarkets();
@@ -91,7 +93,7 @@ export function HomePage({
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
             <button className="rounded bg-brand py-2 text-[0.82rem] font-semibold text-white" onClick={openDeposit}>充值</button>
-            <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold">提现</button>
+            <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold" onClick={openWithdraw}>提现</button>
             <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold" onClick={openTrade}>交易</button>
           </div>
         </div>

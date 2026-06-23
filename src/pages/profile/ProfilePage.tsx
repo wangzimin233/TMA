@@ -6,7 +6,15 @@ import { getErrorMessage } from '../../api/client';
 import { useUserAssets } from '../../hooks/useMockQueries';
 import { useAuthStore } from '../../store/auth.store';
 
-export function ProfilePage({ onLoggedOut, openDeposit }: { onLoggedOut: () => void; openDeposit: () => void }) {
+export function ProfilePage({
+  onLoggedOut,
+  openDeposit,
+  openWithdraw,
+}: {
+  onLoggedOut: () => void;
+  openDeposit: () => void;
+  openWithdraw: () => void;
+}) {
   const { data: assets } = useUserAssets();
   const queryClient = useQueryClient();
   const userInfo = useAuthStore((state) => state.userInfo);
@@ -64,7 +72,7 @@ export function ProfilePage({ onLoggedOut, openDeposit }: { onLoggedOut: () => v
         <p className="mt-1.5 font-mono text-[0.82rem] text-muted-foreground tabular-nums">≈ {assets?.btcEstimate ?? '0.6432'} BTC</p>
         <div className="mt-4 grid grid-cols-2 gap-2.5">
           <button className="rounded bg-brand py-2.5 text-[0.92rem] font-semibold text-white" onClick={openDeposit}>充币</button>
-          <button className="rounded border border-line bg-base2 py-2.5 text-[0.92rem] font-semibold">提币</button>
+          <button className="rounded border border-line bg-base2 py-2.5 text-[0.92rem] font-semibold" onClick={openWithdraw}>提币</button>
         </div>
       </div>
 

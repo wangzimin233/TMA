@@ -2,8 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { fetchTradeUser } from './api/auth';
 import { getErrorMessage } from './api/client';
+import type { DepositCoin, DepositNetwork } from './api/deposit';
+import type { WithdrawCoin, WithdrawNetwork } from './api/withdraw';
 import { BottomNav } from './components/BottomNav';
+import { DepositSelectionDrawers } from './components/DepositSelectionDrawers';
 import { LeverageModal } from './components/LeverageModal';
+import { WithdrawSelectionDrawers } from './components/WithdrawSelectionDrawers';
 import { Toaster } from './components/ui/sonner';
 import { AuthPage } from './pages/auth/AuthPage';
 import { DepositPage } from './pages/deposit/DepositPage';
@@ -11,15 +15,24 @@ import { HomePage } from './pages/home/HomePage';
 import { MarketPage } from './pages/market/MarketPage';
 import { ProfilePage } from './pages/profile/ProfilePage';
 import { TradePage } from './pages/trade/TradePage';
+import { WithdrawPage } from './pages/withdraw/WithdrawPage';
 import { useAuthStore } from './store/auth.store';
 import { useTradeStore } from './store/trade.store';
 import type { Tab } from './types/app';
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
-  const [activeView, setActiveView] = useState<'main' | 'deposit'>('main');
+  const [activeView, setActiveView] = useState<'main' | 'deposit' | 'withdraw'>('main');
   const [showAuth, setShowAuth] = useState(false);
   const [showLeverage, setShowLeverage] = useState(false);
+  const [showDepositCoinPicker, setShowDepositCoinPicker] = useState(false);
+  const [showDepositNetworkPicker, setShowDepositNetworkPicker] = useState(false);
+  const [selectedDepositCoin, setSelectedDepositCoin] = useState<DepositCoin | null>(null);
+  const [selectedDepositNetwork, setSelectedDepositNetwork] = useState<DepositNetwork | null>(null);
+  const [showWithdrawCoinPicker, setShowWithdrawCoinPicker] = useState(false);
+  const [showWithdrawNetworkPicker, setShowWithdrawNetworkPicker] = useState(false);
+  const [selectedWithdrawCoin, setSelectedWithdrawCoin] = useState<WithdrawCoin | null>(null);
+  const [selectedWithdrawNetwork, setSelectedWithdrawNetwork] = useState<WithdrawNetwork | null>(null);
   const pendingAuthAction = useRef<(() => void) | null>(null);
   const token = useAuthStore((state) => state.token);
   const isLogin = useAuthStore((state) => state.isLogin);
@@ -75,7 +88,55 @@ function App() {
   };
 
   const openDeposit = () => {
-    requireAuth(() => setActiveView('deposit'));
+    requireAuth(() => {
+      setActiveView('main');
+      setShowDepositCoinPicker(true);
+    });
+  };
+
+  const selectDepositCoin = (coin: DepositCoin) => {
+    setSelectedDepositCoin(coin);
+    setSelectedDepositNetwork(null);
+    setShowDepositCoinPicker(false);
+
+    if (!coin.networks.length) {
+      toast.error('当前资产暂无可用充值网络');
+      return;
+    }
+
+    setShowDepositNetworkPicker(true);
+  };
+
+  const selectDepositNetwork = (network: DepositNetwork) => {
+    setSelectedDepositNetwork(network);
+    setShowDepositNetworkPicker(false);
+    setActiveView('deposit');
+  };
+
+  const openWithdraw = () => {
+    requireAuth(() => {
+      setActiveView('main');
+      setShowWithdrawCoinPicker(true);
+    });
+  };
+
+  const selectWithdrawCoin = (coin: WithdrawCoin) => {
+    setSelectedWithdrawCoin(coin);
+    setSelectedWithdrawNetwork(null);
+    setShowWithdrawCoinPicker(false);
+
+    if (!coin.networks.length) {
+      toast.error('当前资产暂无可用提现网络');
+      return;
+    }
+
+    setShowWithdrawNetworkPicker(true);
+  };
+
+  const selectWithdrawNetwork = (network: WithdrawNetwork) => {
+    setSelectedWithdrawNetwork(network);
+    setShowWithdrawNetworkPicker(false);
+    setActiveView('withdraw');
   };
 
   const handleAuthSuccess = () => {
@@ -97,19 +158,39 @@ function App() {
 
   const screen = useMemo(() => {
     if (showAuth) return <AuthPage onBack={closeAuth} onSuccess={handleAuthSuccess} />;
-    if (activeView === 'deposit') return <DepositPage onBack={() => setActiveView('main')} />;
+    if (activeView === 'deposit' && selectedDepositCoin && selectedDepositNetwork) {
+      return (
+        <DepositPage
+          coin={selectedDepositCoin}
+          network={selectedDepositNetwork}
+          onBack={() => setActiveView('main')}
+        />
+      );
+    }
+    if (activeView === 'withdraw' && selectedWithdrawCoin && selectedWithdrawNetwork) {
+      return (
+        <WithdrawPage
+          coin={selectedWithdrawCoin}
+          network={selectedWithdrawNetwork}
+          onBack={() => setActiveView('main')}
+        />
+      );
+    }
     if (activeTab === 'home') {
       return (
         <HomePage
           isLogin={isLogin}
           openAuth={() => requireAuth(() => undefined)}
           openDeposit={openDeposit}
+          openWithdraw={openWithdraw}
           openTrade={() => setActiveTab('trade')}
         />
       );
     }
     if (activeTab === 'market') return <MarketPage openTrade={() => setActiveTab('trade')} />;
-    if (activeTab === 'profile') return <ProfilePage onLoggedOut={goHomeAfterLogout} openDeposit={openDeposit} />;
+    if (activeTab === 'profile') {
+      return <ProfilePage onLoggedOut={goHomeAfterLogout} openDeposit={openDeposit} openWithdraw={openWithdraw} />;
+    }
 
     return (
       <TradePage
@@ -120,7 +201,18 @@ function App() {
         openLeverage={() => setShowLeverage(true)}
       />
     );
-  }, [activeTab, activeView, isLogin, showAuth, showChart, tradeMode]);
+  }, [
+    activeTab,
+    activeView,
+    isLogin,
+    selectedDepositCoin,
+    selectedDepositNetwork,
+    selectedWithdrawCoin,
+    selectedWithdrawNetwork,
+    showAuth,
+    showChart,
+    tradeMode,
+  ]);
 
   const changeTab = (tab: Tab) => {
     const action = () => {
@@ -142,6 +234,24 @@ function App() {
         {screen}
         {activeView === 'main' && !showAuth && <BottomNav active={activeTab} onChange={changeTab} />}
       </main>
+      <DepositSelectionDrawers
+        coinOpen={showDepositCoinPicker}
+        networkOpen={showDepositNetworkPicker}
+        selectedCoin={selectedDepositCoin}
+        onCoinOpenChange={setShowDepositCoinPicker}
+        onNetworkOpenChange={setShowDepositNetworkPicker}
+        onSelectCoin={selectDepositCoin}
+        onSelectNetwork={selectDepositNetwork}
+      />
+      <WithdrawSelectionDrawers
+        coinOpen={showWithdrawCoinPicker}
+        networkOpen={showWithdrawNetworkPicker}
+        selectedCoin={selectedWithdrawCoin}
+        onCoinOpenChange={setShowWithdrawCoinPicker}
+        onNetworkOpenChange={setShowWithdrawNetworkPicker}
+        onSelectCoin={selectWithdrawCoin}
+        onSelectNetwork={selectWithdrawNetwork}
+      />
       {showLeverage && <LeverageModal onClose={() => setShowLeverage(false)} />}
       {isHydrating && (
         <div className="pointer-events-none fixed left-1/2 top-3 z-50 -translate-x-1/2 rounded-full border border-line bg-panel px-3 py-1.5 text-[0.72rem] text-muted-foreground shadow-lg shadow-black/20">
