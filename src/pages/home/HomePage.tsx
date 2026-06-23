@@ -22,7 +22,17 @@ const futuresMarketBases = ['BTC', 'ETH', 'SOL', 'DOGE', 'SUI', 'NEAR', 'OP', 'A
 type HomeMarketTab = (typeof homeMarketTabs)[number];
 type MarketTypeFilter = (typeof marketTypeFilters)[number];
 
-export function HomePage({ openDeposit, openTrade }: { openDeposit: () => void; openTrade: () => void }) {
+export function HomePage({
+  isLogin,
+  openAuth,
+  openDeposit,
+  openTrade,
+}: {
+  isLogin: boolean;
+  openAuth: () => void;
+  openDeposit: () => void;
+  openTrade: () => void;
+}) {
   const { data: marketPairs = [] } = useHomeMarkets();
   const { data: assets } = useUserAssets();
   const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
@@ -66,12 +76,18 @@ export function HomePage({ openDeposit, openTrade }: { openDeposit: () => void; 
             <div>
               <p className="text-[0.72rem] text-muted-foreground">总资产折算</p>
               <div className="mt-1.5 flex items-end gap-2">
-                <span className="font-mono text-[1.45rem] font-bold leading-none tabular-nums">${assets?.totalBalance ?? '45,231.89'}</span>
-                <span className="pb-0.5 font-mono text-[0.76rem] text-brand tabular-nums">+{assets?.changePercent ?? 2.4}%</span>
+                <span className="font-mono text-[1.45rem] font-bold leading-none tabular-nums">
+                  {isLogin ? `$${assets?.totalBalance ?? '45,231.89'}` : '登录后查看'}
+                </span>
+                {isLogin && <span className="pb-0.5 font-mono text-[0.76rem] text-brand tabular-nums">+{assets?.changePercent ?? 2.4}%</span>}
               </div>
-              <p className="mt-1 font-mono text-[0.72rem] text-muted-foreground tabular-nums">≈ {assets?.btcEstimate ?? '0.6432'} BTC</p>
+              <p className="mt-1 font-mono text-[0.72rem] text-muted-foreground tabular-nums">
+                {isLogin ? `≈ ${assets?.btcEstimate ?? '0.6432'} BTC` : '登录后同步资金、充值与账户信息'}
+              </p>
             </div>
-            <button className="rounded border border-line px-2.5 py-1.5 text-[0.72rem] text-muted-foreground">资产</button>
+            <button className="rounded border border-line px-2.5 py-1.5 text-[0.72rem] text-muted-foreground" onClick={openAuth}>
+              {isLogin ? '资产' : '登录'}
+            </button>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
             <button className="rounded bg-brand py-2 text-[0.82rem] font-semibold text-white" onClick={openDeposit}>充值</button>
