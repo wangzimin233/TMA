@@ -25,3 +25,10 @@ export function useDepositOrders(coinCode?: string) {
     enabled: Boolean(coinCode),
   });
 }
+
+export function useAllDepositOrders() {
+  return useQuery({
+    queryKey: ['deposit', 'orders', 'all'],
+    queryFn: () => fetchDepositOrders({ page: 1, pageSize: 20 }),
+  });
+}

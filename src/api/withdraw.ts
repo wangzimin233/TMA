@@ -1,5 +1,7 @@
 import { apiClient, requestData } from './client';
 import type { PageResult } from './deposit';
+import type { AccountAsset } from './account';
+export type { AccountAsset } from './account';
 
 export type WithdrawNetwork = {
   networkCode: string;
@@ -71,22 +73,6 @@ export type WithdrawOrdersParams = {
   coinCode?: string;
   auditStatus?: number;
   orderStatus?: number;
-};
-
-export type AccountAsset = {
-  accountId: number;
-  accountType: 'FUND' | 'SPOT' | 'FUTURES' | string;
-  accountName: string;
-  coinCode: string;
-  coinName: string;
-  totalBalance: number;
-  availableBalance: number;
-  frozenBalance: number;
-  marginBalance: number;
-  unrealizedPnlBalance: number;
-  pendingDeposit: number;
-  pendingWithdraw: number;
-  accountStatus: number;
 };
 
 export type SecurityInfo = {

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { accountQueryKeys } from './useAccountQueries';
 import {
   applyWithdraw,
   confirmWithdrawGoogleAuthBind,
@@ -25,6 +26,13 @@ export function useWithdrawOrders(coinCode?: string) {
     queryKey: ['withdraw', 'orders', coinCode],
     queryFn: () => fetchWithdrawOrders({ coinCode, page: 1, pageSize: 10 }),
     enabled: Boolean(coinCode),
+  });
+}
+
+export function useAllWithdrawOrders() {
+  return useQuery({
+    queryKey: ['withdraw', 'orders', 'all'],
+    queryFn: () => fetchWithdrawOrders({ page: 1, pageSize: 20 }),
   });
 }
 
@@ -75,7 +83,8 @@ export function useApplyWithdraw() {
     mutationFn: (payload: WithdrawApplyPayload) => applyWithdraw(payload),
     onSuccess: (_, payload) => {
       queryClient.invalidateQueries({ queryKey: ['withdraw', 'orders', payload.coinCode] });
-      queryClient.invalidateQueries({ queryKey: ['account', 'assets', 'FUND'] });
+      queryClient.invalidateQueries({ queryKey: ['withdraw', 'orders', 'all'] });
+      queryClient.invalidateQueries({ queryKey: accountQueryKeys.root });
       queryClient.invalidateQueries({ queryKey: ['mock', 'assets'] });
     },
   });
