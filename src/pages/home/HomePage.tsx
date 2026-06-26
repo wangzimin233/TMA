@@ -11,7 +11,8 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { quickActions } from '../../data/mock';
 import type { MarketPair } from '../../data/mock';
-import { useHomeMarkets, useUserAssets } from '../../hooks/useMockQueries';
+import { useAccountOverview } from '../../hooks/useAccountQueries';
+import { useHomeMarkets } from '../../hooks/useMockQueries';
 import { useTradeStore } from '../../store/trade.store';
 
 const homeMarketTabs = ['自选', '热门', '涨幅榜', '跌幅榜', '新币'] as const;
@@ -28,17 +29,23 @@ export function HomePage({
   openDeposit,
   openWithdraw,
   openTrade,
+  openProfile,
 }: {
   isLogin: boolean;
   openAuth: () => void;
   openDeposit: () => void;
   openWithdraw: () => void;
   openTrade: () => void;
+  openProfile: () => void;
 }) {
   const { data: marketPairs = [] } = useHomeMarkets();
-  const { data: assets } = useUserAssets();
+  const { data: accountOverview } = useAccountOverview(isLogin);
   const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
   const setShowChart = useTradeStore((state) => state.setShowChart);
+  const valuationCoinCode = accountOverview?.valuationCoinCode ?? 'USDT';
+  const totalAssetText = isLogin && accountOverview ? formatValuation(accountOverview.estimatedTotalValue, valuationCoinCode) : '--';
+  const pnlText = isLogin && accountOverview ? `${formatSigned(accountOverview.todayPnlValue)} ${valuationCoinCode}` : '--';
+  const estimatedText = isLogin && accountOverview ? `≈ ${formatNumber(accountOverview.estimatedTotalValue)} ${valuationCoinCode}` : '--';
 
   const openPair = (symbol: string) => {
     setCurrentSymbol(symbol);
@@ -78,16 +85,21 @@ export function HomePage({
             <div>
               <p className="text-[0.72rem] text-muted-foreground">总资产折算</p>
               <div className="mt-1.5 flex items-end gap-2">
-                <span className="font-mono text-[1.45rem] font-bold leading-none tabular-nums">
-                  {isLogin ? `$${assets?.totalBalance ?? '45,231.89'}` : '登录后查看'}
+                <span className="min-w-0 truncate font-mono text-[1.45rem] font-bold leading-none tabular-nums">
+                  {totalAssetText}
                 </span>
-                {isLogin && <span className="pb-0.5 font-mono text-[0.76rem] text-brand tabular-nums">+{assets?.changePercent ?? 2.4}%</span>}
+                <span className={`shrink-0 pb-0.5 font-mono text-[0.76rem] tabular-nums ${getSignedClass(accountOverview?.todayPnlValue)}`}>
+                  {pnlText}
+                </span>
               </div>
               <p className="mt-1 font-mono text-[0.72rem] text-muted-foreground tabular-nums">
-                {isLogin ? `≈ ${assets?.btcEstimate ?? '0.6432'} BTC` : '登录后同步资金、充值与账户信息'}
+                {estimatedText}
               </p>
             </div>
-            <button className="rounded border border-line px-2.5 py-1.5 text-[0.72rem] text-muted-foreground" onClick={openAuth}>
+            <button
+              className="rounded border border-line px-2.5 py-1.5 text-[0.72rem] text-muted-foreground"
+              onClick={isLogin ? openProfile : openAuth}
+            >
               {isLogin ? '资产' : '登录'}
             </button>
           </div>
@@ -110,6 +122,31 @@ export function HomePage({
       </div>
     </section>
   );
+}
+
+function formatValuation(value: number, coinCode: string) {
+  const formatted = formatNumber(value);
+  if (coinCode === 'USD' || coinCode === 'USDT') return `$${formatted}`;
+  return `${formatted} ${coinCode}`;
+}
+
+function formatNumber(value?: number) {
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 8,
+  }).format(Number(value) || 0);
+}
+
+function formatSigned(value?: number) {
+  const normalizedValue = Number(value) || 0;
+  const prefix = normalizedValue > 0 ? '+' : '';
+  return `${prefix}${formatNumber(normalizedValue)}`;
+}
+
+function getSignedClass(value?: number) {
+  const normalizedValue = Number(value) || 0;
+  if (normalizedValue > 0) return 'text-brand';
+  if (normalizedValue < 0) return 'text-danger';
+  return 'text-muted-foreground';
 }
 
 function CoinCard({ pair }: { pair: MarketPair }) {

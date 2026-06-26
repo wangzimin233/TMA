@@ -8,13 +8,13 @@ import type { WithdrawCoin, WithdrawNetwork, WithdrawOrder } from '../../api/wit
 import { getErrorMessage } from '../../api/client';
 import { Button } from '../../components/ui/button';
 import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from '../../components/ui/drawer';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import {
@@ -68,8 +68,6 @@ export function WithdrawPage({ coin, network, onBack }: WithdrawPageProps) {
     minWithdrawAmount: network.minWithdrawAmount,
     withdrawFee: network.withdrawFee,
     addressRegex: network.addressRegex,
-    googleCode,
-    googleRequired,
     securityError: securityQuery.isError,
   });
   const canSubmit = withdrawReady && !validation && !assetsQuery.isLoading && !applyMutation.isPending;
@@ -84,8 +82,18 @@ export function WithdrawPage({ coin, network, onBack }: WithdrawPageProps) {
       toast.error(validation);
       return;
     }
+    if (!googleRequired) {
+      void submitWithdraw();
+      return;
+    }
 
     setConfirmOpen(true);
+  };
+
+  const closeConfirm = () => {
+    if (applyMutation.isPending) return;
+    setConfirmOpen(false);
+    setGoogleCode('');
   };
 
   const copySecret = async () => {
@@ -127,6 +135,10 @@ export function WithdrawPage({ coin, network, onBack }: WithdrawPageProps) {
   const submitWithdraw = async () => {
     if (validation) {
       toast.error(validation);
+      return;
+    }
+    if (googleRequired && googleCode.trim().length !== 6) {
+      toast.error('请输入 6 位 Google 验证码');
       return;
     }
 
@@ -286,27 +298,6 @@ export function WithdrawPage({ coin, network, onBack }: WithdrawPageProps) {
           </div>
 
           <div className="rounded-md border border-line bg-panel p-3">
-            {googleRequired && (
-              <>
-                <div className="mb-3 flex items-center gap-2 text-[0.78rem] text-muted-foreground">
-                  <ShieldCheck className="size-4 text-brand" />
-                  提现二次验证已开启
-                </div>
-                <Field label="Google 验证码">
-                  <Input
-                    value={googleCode}
-                    onChange={(event) => setGoogleCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="请输入 6 位验证码"
-                    inputMode="numeric"
-                    className="h-10 rounded-md border-line bg-base2 font-mono text-[0.9rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/25"
-                  />
-                </Field>
-              </>
-            )}
-            {!googleRequired && <p className="text-[0.76rem] text-muted-foreground">当前提现不需要 Google 验证码。</p>}
-          </div>
-
-          <div className="rounded-md border border-line bg-panel p-3">
             <Field label="备注">
               <Input
                 value={remark}
@@ -357,41 +348,48 @@ export function WithdrawPage({ coin, network, onBack }: WithdrawPageProps) {
         )}
       </div>
 
-      <Drawer open={confirmOpen} onOpenChange={setConfirmOpen} direction="bottom">
-        <DrawerContent className="mx-auto max-h-[86vh] w-full max-w-[430px] border-line bg-base pb-[env(safe-area-inset-bottom)] text-ink">
-          <DrawerHeader className="px-4 pb-2 pt-4 text-left">
-            <DrawerTitle className="text-[1.05rem] font-semibold text-ink">确认提现</DrawerTitle>
-            <DrawerDescription className="text-left text-[0.74rem] text-muted-foreground">
-              请再次核对地址和网络，提交后将进入审核。
-            </DrawerDescription>
-          </DrawerHeader>
-          <div className="space-y-3 px-4 pb-3">
-            <ConfirmRow label="资产" value={`${coin.coinCode} · ${network.networkCode}`} />
-            <ConfirmRow label="提现地址" value={toAddress.trim()} mono />
-            {network.memoSupport === 1 && memoTag.trim() && <ConfirmRow label="Memo/Tag" value={memoTag.trim()} mono />}
-            <ConfirmRow label="申请数量" value={`${formatNumber(normalizedAmount)} ${coin.coinCode}`} />
-            <ConfirmRow label="手续费" value={`${formatNumber(network.withdrawFee)} ${coin.coinCode}`} />
-            <ConfirmRow label="预计到账" value={`${formatNumber(Math.max(actualAmount, 0))} ${coin.coinCode}`} />
-          </div>
-          <DrawerFooter className="px-4 pt-1">
+      <Dialog open={confirmOpen} onOpenChange={(open) => (open ? setConfirmOpen(true) : closeConfirm())}>
+        <DialogContent showCloseButton={false} className="w-[calc(100%-2rem)] max-w-[360px] gap-3 border border-line bg-panel p-4 text-ink shadow-2xl shadow-black/45">
+          <DialogHeader className="gap-1.5">
+            <div className="mx-auto mb-1 grid size-9 place-items-center rounded-md bg-brand/10 text-brand">
+              <ShieldCheck className="size-5" />
+            </div>
+            <DialogTitle className="text-center text-[1rem] font-semibold text-ink">提现二次验证</DialogTitle>
+            <DialogDescription className="text-center text-[0.74rem] leading-relaxed text-muted-foreground">
+              请输入 Google 验证码，确认后提交提现申请。
+            </DialogDescription>
+          </DialogHeader>
+
+          <Field label="Google 验证码">
+            <Input
+              value={googleCode}
+              onChange={(event) => setGoogleCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="请输入 6 位验证码"
+              inputMode="numeric"
+              autoFocus
+              className="h-11 rounded-md border-line bg-base2 text-center font-mono text-[1rem] tracking-[0.22em] text-ink placeholder:text-[0.84rem] placeholder:tracking-normal placeholder:text-muted-foreground focus-visible:ring-brand/25"
+            />
+          </Field>
+
+          <DialogFooter className="-mx-4 -mb-4 grid grid-cols-2 gap-2 rounded-b-xl border-t border-line bg-base px-4 py-3 sm:grid-cols-2 sm:justify-stretch">
             <Button
-              className="h-11 rounded-md bg-danger text-[0.92rem] font-semibold text-white hover:bg-danger/90"
+              variant="outline"
+              className="h-10 rounded-md border-line bg-base2 text-[0.86rem] text-ink hover:bg-soft"
+              disabled={applyMutation.isPending}
+              onClick={closeConfirm}
+            >
+              取消
+            </Button>
+            <Button
+              className="h-10 rounded-md bg-danger text-[0.86rem] font-semibold text-white hover:bg-danger/90"
               disabled={applyMutation.isPending}
               onClick={submitWithdraw}
             >
-              {applyMutation.isPending ? '提交中...' : '确认提交'}
+              {applyMutation.isPending ? '提交中...' : '确认'}
             </Button>
-            <Button
-              variant="outline"
-              className="h-10 rounded-md border-line bg-base2 text-ink"
-              disabled={applyMutation.isPending}
-              onClick={() => setConfirmOpen(false)}
-            >
-              返回修改
-            </Button>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -609,15 +607,6 @@ function WithdrawRecordRow({ record, index }: { record: WithdrawOrder; index: nu
   );
 }
 
-function ConfirmRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex min-w-0 items-start justify-between gap-3 border-b border-line pb-2 last:border-b-0">
-      <span className="shrink-0 text-[0.74rem] text-muted-foreground">{label}</span>
-      <span className={`min-w-0 break-all text-right text-[0.78rem] text-ink ${mono ? 'font-mono' : ''}`}>{value}</span>
-    </div>
-  );
-}
-
 function CoinAvatar({ coin }: { coin: WithdrawCoin }) {
   if (coin.iconUrl) {
     return <img src={coin.iconUrl} alt="" className="size-9 shrink-0 rounded-full bg-soft object-cover" referrerPolicy="no-referrer" />;
@@ -658,8 +647,6 @@ function validateForm({
   minWithdrawAmount,
   withdrawFee,
   addressRegex,
-  googleCode,
-  googleRequired,
   securityError,
 }: {
   toAddress: string;
@@ -668,8 +655,6 @@ function validateForm({
   minWithdrawAmount: number;
   withdrawFee: number;
   addressRegex?: string | null;
-  googleCode: string;
-  googleRequired: boolean;
   securityError: boolean;
 }) {
   const address = toAddress.trim();
@@ -680,7 +665,6 @@ function validateForm({
   if (amount > availableBalance) return '提现金额不能超过资金账户可用余额';
   if (amount - withdrawFee <= 0) return '扣除手续费后到账金额必须大于 0';
   if (securityError) return '安全设置加载失败，请重试';
-  if (googleRequired && googleCode.trim().length !== 6) return '请输入 6 位 Google 验证码';
   return '';
 }
 

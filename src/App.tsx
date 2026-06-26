@@ -103,6 +103,7 @@ function App() {
   const openWithdraw = () => navigate('/withdraw');
   const openTransfer = () => navigate('/transfer');
   const openTrade = () => navigate('/trade');
+  const openProfile = () => navigate('/profile');
   const openRecords = () => navigate('/profile/records');
   const openSettings = () => navigate('/profile/settings');
 
@@ -119,6 +120,7 @@ function App() {
             openDeposit={openDeposit}
             openWithdraw={openWithdraw}
             openTrade={openTrade}
+            openProfile={openProfile}
           />
         }
       />
