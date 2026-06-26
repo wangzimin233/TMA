@@ -159,138 +159,142 @@ export function AuthPage({ onBack, onSuccess }: { onBack: () => void; onSuccess:
         <span className="size-8" />
       </header>
 
-      <form className="px-4 pb-6 pt-4" onSubmit={handleSubmit(submitAuth)}>
-        <div className="border-b border-line pb-4">
-          <div className="mb-3 grid size-11 place-items-center rounded-md border border-line bg-panel text-brand">
+      <form className="px-4 pb-6 pt-3.5" onSubmit={handleSubmit(submitAuth)}>
+        <div className="flex min-w-0 items-center gap-3 border-b border-line pb-3.5">
+          <div className="grid size-10 shrink-0 place-items-center rounded-md border border-line bg-panel text-brand">
             <ShieldCheck className="size-5" />
           </div>
-          <h2 className="text-[1.25rem] font-semibold leading-tight">{title}</h2>
-          <p className="mt-1.5 text-[0.76rem] leading-relaxed text-muted-foreground">{subtitle}</p>
-        </div>
-
-        <Tabs value={authTab} onValueChange={(value) => setAuthTab(value as AuthTab)} className="mt-4">
-          <TabsList className="grid h-8 w-full grid-cols-2 items-stretch gap-0 overflow-hidden rounded-md border border-line bg-base2 p-[2px]">
-            <TabsTrigger
-              value="login"
-              className="h-full min-h-0 rounded-[5px] border-0 py-0 text-[0.78rem] font-semibold text-muted-foreground shadow-none transition after:hidden active:scale-95 data-[state=active]:bg-brand data-[state=active]:text-[#06130e] dark:data-[state=active]:bg-brand dark:data-[state=active]:text-[#06130e]"
-            >
-              登录
-            </TabsTrigger>
-            <TabsTrigger
-              value="register"
-              className="h-full min-h-0 rounded-[5px] border-0 py-0 text-[0.78rem] font-semibold text-muted-foreground shadow-none transition after:hidden active:scale-95 data-[state=active]:bg-brand data-[state=active]:text-[#06130e] dark:data-[state=active]:bg-brand dark:data-[state=active]:text-[#06130e]"
-            >
-              注册
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {!isRegister && (
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {(['PASSWORD', 'CODE'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className={`rounded border px-3 py-2 text-[0.78rem] font-semibold transition active:scale-[0.98] ${
-                  loginMode === mode ? 'border-brand bg-brand/10 text-brand' : 'border-line bg-base2 text-muted-foreground'
-                }`}
-                onClick={() => setLoginMode(mode)}
-              >
-                {mode === 'PASSWORD' ? '密码登录' : '验证码登录'}
-              </button>
-            ))}
+          <div className="min-w-0">
+            <h2 className="truncate text-[1.05rem] font-semibold leading-tight">{title}</h2>
+            <p className="mt-1 truncate text-[0.72rem] text-muted-foreground">{subtitle}</p>
           </div>
-        )}
-
-        <div className="mt-4 space-y-3.5">
-          <Field label="邮箱" error={errors.email?.message}>
-            <div className="relative">
-              <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="h-10 rounded-md border-line bg-base2 pl-9 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
-                inputMode="email"
-                placeholder="name@example.com"
-                type="email"
-                {...register('email')}
-              />
-            </div>
-          </Field>
-
-          {(isRegister || loginMode === 'PASSWORD') && (
-            <Field label="密码" error={errors.password?.message}>
-              <div className="relative">
-                <Input
-                  className="h-10 rounded-md border-line bg-base2 pr-10 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
-                  placeholder="至少 8 位登录密码"
-                  type={showPassword ? 'text' : 'password'}
-                  {...register('password')}
-                />
-                <button
-                  aria-label={showPassword ? '隐藏密码' : '显示密码'}
-                  className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center text-muted-foreground active:scale-95"
-                  type="button"
-                  onClick={() => setShowPassword((value) => !value)}
-                >
-                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                </button>
-              </div>
-            </Field>
-          )}
-
-          {needsCode && (
-            <Field label="邮箱验证码" error={errors.code?.message}>
-              <div className="flex gap-2">
-                <Input
-                  className="h-10 rounded-md border-line bg-base2 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="6 位验证码"
-                  {...register('code')}
-                />
-                <Button
-                  className="h-10 w-[6.2rem] rounded-md border-line bg-soft px-2 text-[0.76rem] text-ink hover:bg-soft2"
-                  disabled={isSendingCode || codeCountdown > 0}
-                  type="button"
-                  variant="outline"
-                  onClick={requestEmailCode}
-                >
-                  {isSendingCode && <Loader2 className="size-3.5 animate-spin" />}
-                  {codeButtonText}
-                </Button>
-              </div>
-            </Field>
-          )}
-
-          {isRegister && (
-            <div className="grid grid-cols-2 gap-2.5">
-              <Field label="昵称" optional>
-                <Input
-                  className="h-10 rounded-md border-line bg-base2 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
-                  placeholder="可选"
-                  {...register('nickname')}
-                />
-              </Field>
-              <Field label="邀请码" optional>
-                <Input
-                  className="h-10 rounded-md border-line bg-base2 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
-                  placeholder="可选"
-                  {...register('inviteCode')}
-                />
-              </Field>
-            </div>
-          )}
         </div>
 
-        <Button
-          className="mt-5 h-10 w-full rounded-md bg-brand text-[0.9rem] font-semibold text-[#06130e] hover:bg-brand/90"
-          disabled={isSubmitting}
-          type="submit"
-        >
-          {isSubmitting && <Loader2 className="size-4 animate-spin" />}
-          {isRegister ? '注册并登录' : '登录'}
-        </Button>
+        <div className="mt-3 rounded-md border border-line bg-panel p-3">
+          <Tabs value={authTab} onValueChange={(value) => setAuthTab(value as AuthTab)}>
+            <TabsList className="grid h-9 w-full grid-cols-2 items-stretch gap-0 overflow-hidden rounded-md border border-line bg-base2 p-[2px]">
+              <TabsTrigger
+                value="login"
+                className="h-full min-h-0 rounded-[4px] border-0 py-0 text-[0.78rem] font-semibold text-muted-foreground shadow-none transition after:hidden active:scale-95 data-[state=active]:bg-brand data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-brand dark:data-[state=active]:text-primary-foreground"
+              >
+                登录
+              </TabsTrigger>
+              <TabsTrigger
+                value="register"
+                className="h-full min-h-0 rounded-[4px] border-0 py-0 text-[0.78rem] font-semibold text-muted-foreground shadow-none transition after:hidden active:scale-95 data-[state=active]:bg-brand data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-brand dark:data-[state=active]:text-primary-foreground"
+              >
+                注册
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-        <p className="mt-3 text-center text-[0.68rem] leading-relaxed text-muted-foreground">
+          {!isRegister && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {(['PASSWORD', 'CODE'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`h-9 rounded border px-3 text-[0.78rem] font-semibold transition active:scale-[0.98] ${
+                    loginMode === mode ? 'border-brand bg-brand/10 text-brand' : 'border-line bg-base2 text-muted-foreground'
+                  }`}
+                  onClick={() => setLoginMode(mode)}
+                >
+                  {mode === 'PASSWORD' ? '密码登录' : '验证码登录'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4 space-y-3.5">
+            <Field label="邮箱" error={errors.email?.message}>
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="h-10 rounded-md border-line bg-base2 pl-9 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
+                  inputMode="email"
+                  placeholder="name@example.com"
+                  type="email"
+                  {...register('email')}
+                />
+              </div>
+            </Field>
+
+            {(isRegister || loginMode === 'PASSWORD') && (
+              <Field label="密码" error={errors.password?.message}>
+                <div className="relative">
+                  <Input
+                    className="h-10 rounded-md border-line bg-base2 pr-10 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
+                    placeholder="至少 8 位登录密码"
+                    type={showPassword ? 'text' : 'password'}
+                    {...register('password')}
+                  />
+                  <button
+                    aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                    className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center text-muted-foreground active:scale-95"
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                  >
+                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
+              </Field>
+            )}
+
+            {needsCode && (
+              <Field label="邮箱验证码" error={errors.code?.message}>
+                <div className="flex gap-2">
+                  <Input
+                    className="h-10 rounded-md border-line bg-base2 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="6 位验证码"
+                    {...register('code')}
+                  />
+                  <Button
+                    className="h-10 w-[6.2rem] rounded-md border-line bg-soft px-2 text-[0.76rem] text-ink hover:bg-soft2"
+                    disabled={isSendingCode || codeCountdown > 0}
+                    type="button"
+                    variant="outline"
+                    onClick={requestEmailCode}
+                  >
+                    {isSendingCode && <Loader2 className="size-3.5 animate-spin" />}
+                    {codeButtonText}
+                  </Button>
+                </div>
+              </Field>
+            )}
+
+            {isRegister && (
+              <div className="grid grid-cols-2 gap-2.5">
+                <Field label="昵称" optional>
+                  <Input
+                    className="h-10 rounded-md border-line bg-base2 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
+                    placeholder="可选"
+                    {...register('nickname')}
+                  />
+                </Field>
+                <Field label="邀请码" optional>
+                  <Input
+                    className="h-10 rounded-md border-line bg-base2 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
+                    placeholder="可选"
+                    {...register('inviteCode')}
+                  />
+                </Field>
+              </div>
+            )}
+          </div>
+
+          <Button
+            className="mt-5 h-10 w-full rounded-md bg-brand text-[0.9rem] font-semibold text-primary-foreground hover:bg-brand/90"
+            disabled={isSubmitting}
+            type="submit"
+          >
+            {isSubmitting && <Loader2 className="size-4 animate-spin" />}
+            {isRegister ? '注册并登录' : '登录'}
+          </Button>
+        </div>
+
+        <p className="mt-3 px-2 text-center text-[0.68rem] leading-relaxed text-muted-foreground">
           登录即表示你同意平台账户安全规则。请勿向任何人泄露邮箱验证码。
         </p>
       </form>

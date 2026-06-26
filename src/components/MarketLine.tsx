@@ -11,7 +11,7 @@ export function MarketLine({ pair }: { pair: MarketPair }) {
         <p className="font-mono text-[0.98rem] font-semibold tabular-nums">{pair.price}</p>
         <p className="font-mono text-[0.7rem] text-muted-foreground tabular-nums">{pair.fiat}</p>
       </div>
-      <div className={`ml-2 rounded px-1.5 py-1.5 text-center font-mono text-[0.78rem] font-semibold text-white tabular-nums ${pair.change >= 0 ? 'bg-brand' : 'bg-danger'}`}>
+      <div className={`ml-2 rounded px-1.5 py-1.5 text-center font-mono text-[0.78rem] font-semibold text-white tabular-nums ${pair.change >= 0 ? 'bg-buy' : 'bg-sell'}`}>
         {pair.change >= 0 ? '+' : ''}
         {pair.change.toFixed(2)}%
       </div>

@@ -45,7 +45,7 @@ export function LeverageModal({ onClose }: { onClose: () => void }) {
           <button className="rounded border border-line py-4" onClick={onClose}>
             取消
           </button>
-          <button className="rounded bg-brand py-4 text-white" onClick={onClose}>
+          <button className="rounded bg-brand py-4 font-semibold text-primary-foreground" onClick={onClose}>
             确认
           </button>
         </div>

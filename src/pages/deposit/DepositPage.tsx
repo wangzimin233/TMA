@@ -148,7 +148,7 @@ export function DepositPage({ coin, network, onBack }: DepositPageProps) {
                 disabled={!address?.address}
                 onClick={copyAddress}
               >
-                {copied ? <Check className="size-4 text-brand" /> : <Copy className="size-4" />}
+                {copied ? <Check className="size-4 text-buy" /> : <Copy className="size-4" />}
               </Button>
             </div>
           </InfoBlock>
@@ -184,7 +184,7 @@ export function DepositPage({ coin, network, onBack }: DepositPageProps) {
             {ordersQuery.isError && (
               <div className="px-3 py-5 text-center">
                 <p className="text-[0.78rem] text-muted-foreground">充值记录加载失败</p>
-                <Button className="mt-3 h-8 bg-brand text-[#06130e]" onClick={() => ordersQuery.refetch()}>
+                <Button className="mt-3 h-8 bg-brand text-primary-foreground" onClick={() => ordersQuery.refetch()}>
                   重新加载
                 </Button>
               </div>
@@ -335,9 +335,9 @@ function selectElementText(element: HTMLElement | null) {
 }
 
 function getOrderStatus(status: number) {
-  if (status === 1) return { label: '已到账', className: 'bg-brand/10 text-brand' };
-  if (status === 2) return { label: '已完成', className: 'bg-brand/10 text-brand' };
-  if (status === 3) return { label: '失败', className: 'bg-danger/10 text-danger' };
+  if (status === 1) return { label: '已到账', className: 'bg-buy/10 text-buy' };
+  if (status === 2) return { label: '已完成', className: 'bg-buy/10 text-buy' };
+  if (status === 3) return { label: '失败', className: 'bg-sell/10 text-sell' };
   if (status === 4) return { label: '已忽略', className: 'bg-soft text-muted-foreground' };
   return { label: '确认中', className: 'bg-warning/10 text-warning' };
 }

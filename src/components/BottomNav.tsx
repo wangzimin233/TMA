@@ -13,7 +13,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="底部导航"
-      className="fixed bottom-0 left-1/2 z-20 w-full max-w-[430px] -translate-x-1/2 border-t border-[#263241] bg-[#0f1620] pb-[env(safe-area-inset-bottom)] shadow-[0_-14px_28px_rgba(3,7,12,0.34)]"
+      className="fixed bottom-0 left-1/2 z-20 w-full max-w-[430px] -translate-x-1/2 border-t border-line bg-nav pb-[env(safe-area-inset-bottom)] shadow-[0_-14px_28px_rgba(3,7,12,0.34)]"
     >
       <div className="grid h-[54px] grid-cols-4 px-2">
         {tabs.map((tab) => {
@@ -25,7 +25,7 @@ export function BottomNav() {
               to={tab.to}
               className={({ isActive }) =>
                 `flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-sm text-[0.6rem] outline-none transition duration-150 active:scale-[0.97] ${
-                  isActive ? 'font-semibold text-brand' : 'font-medium text-[#7f8a9b]'
+                  isActive ? 'font-semibold text-brand' : 'font-medium text-muted-foreground'
                 }`
               }
             >

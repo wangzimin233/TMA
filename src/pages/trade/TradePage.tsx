@@ -53,16 +53,16 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
               </button>
               <div className="flex items-center gap-3.5">
                 <button aria-label="收藏交易对">
-                  <Star className="size-5 fill-[#F59E0B] text-[#F59E0B]" />
+                  <Star className="size-5 fill-brand text-brand" />
                 </button>
                 <button aria-label="打开K线图" onClick={() => setShowChart(true)}>
                   <CandlestickChart className="size-5 text-brand" />
                 </button>
               </div>
             </div>
-            <p className={`mt-2.5 font-mono text-[1.6rem] font-bold leading-none tabular-nums ${ticker.change >= 0 ? 'text-brand' : 'text-danger'}`}>{mode === 'contract' ? ticker.price : ticker.spotPrice}</p>
+            <p className={`mt-2.5 font-mono text-[1.52rem] font-bold leading-none tabular-nums ${ticker.change >= 0 ? 'text-buy' : 'text-sell'}`}>{mode === 'contract' ? ticker.price : ticker.spotPrice}</p>
             <p className="mt-1.5 font-mono text-[0.78rem] text-muted-foreground tabular-nums">
-              ≈{ticker.fiat} <span className={ticker.change >= 0 ? 'text-brand' : 'text-danger'}>{ticker.changeText} {ticker.delta}</span>
+              ≈{ticker.fiat} <span className={ticker.change >= 0 ? 'text-buy' : 'text-sell'}>{ticker.changeText} {ticker.delta}</span>
             </p>
           </div>
           <BinanceOrderPanel mode={mode} symbol={currentSymbol} ticker={ticker} openLeverage={openLeverage} />
@@ -82,11 +82,11 @@ function TradeTop({ mode, setMode }: { mode: TradeMode; setMode: (mode: TradeMod
   return (
     <header className="flex h-11 items-center justify-between border-b border-line px-4">
       <span className="size-5" />
-      <div className="rounded-md bg-[#202733] p-0.5">
-        <button className={`rounded px-6 py-1.5 text-[0.86rem] outline-none transition-colors ${mode === 'spot' ? 'bg-[#111821] text-ink' : 'text-muted-foreground'}`} onClick={() => setMode('spot')}>
+      <div className="rounded-md bg-soft p-0.5">
+        <button className={`rounded px-6 py-1.5 text-[0.86rem] outline-none transition-colors ${mode === 'spot' ? 'bg-base text-brand' : 'text-muted-foreground'}`} onClick={() => setMode('spot')}>
           现货
         </button>
-        <button className={`rounded px-6 py-1.5 text-[0.86rem] outline-none transition-colors ${mode === 'contract' ? 'bg-[#111821] text-ink' : 'text-muted-foreground'}`} onClick={() => setMode('contract')}>
+        <button className={`rounded px-6 py-1.5 text-[0.86rem] outline-none transition-colors ${mode === 'contract' ? 'bg-base text-brand' : 'text-muted-foreground'}`} onClick={() => setMode('contract')}>
           合约
         </button>
       </div>
@@ -127,7 +127,7 @@ function ChartTradePage({
           </button>
           <div className="flex items-center gap-3.5">
             <button aria-label="收藏交易对">
-              <Star className="size-5 fill-[#F59E0B] text-[#F59E0B]" />
+              <Star className="size-5 fill-brand text-brand" />
             </button>
             <button aria-label={mode === 'contract' ? '调整杠杆' : '返回下单'} onClick={mode === 'contract' ? openLeverage : closeChart}>
               <CandlestickChart className="size-5 text-brand" />
@@ -136,9 +136,9 @@ function ChartTradePage({
         </div>
         <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
           <div>
-            <p className={`font-mono text-[1.45rem] font-bold leading-none tabular-nums ${ticker.change >= 0 ? 'text-brand' : 'text-danger'}`}>{mode === 'contract' ? ticker.price : ticker.spotPrice}</p>
+            <p className={`font-mono text-[1.38rem] font-bold leading-none tabular-nums ${ticker.change >= 0 ? 'text-buy' : 'text-sell'}`}>{mode === 'contract' ? ticker.price : ticker.spotPrice}</p>
             <p className="mt-1.5 font-mono text-[0.72rem] text-muted-foreground tabular-nums">
-              ≈{ticker.fiat} <span className={ticker.change >= 0 ? 'text-brand' : 'text-danger'}>{ticker.changeText} {ticker.delta}</span>
+              ≈{ticker.fiat} <span className={ticker.change >= 0 ? 'text-buy' : 'text-sell'}>{ticker.changeText} {ticker.delta}</span>
             </p>
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-right text-[0.68rem] text-muted-foreground">
@@ -164,10 +164,10 @@ function ChartTradePage({
       </div>
       <CandleChart />
       <div className="grid grid-cols-2 gap-2.5 px-4 py-3">
-        <button className="rounded bg-brand py-2.5 text-[0.9rem] font-semibold text-white" onClick={closeChart}>
+        <button className="rounded bg-buy py-2.5 text-[0.9rem] font-semibold text-white" onClick={closeChart}>
           买入
         </button>
-        <button className="rounded border border-danger bg-soft2 py-2.5 text-[0.9rem] font-semibold text-danger" onClick={closeChart}>
+        <button className="rounded border border-sell bg-soft2 py-2.5 text-[0.9rem] font-semibold text-sell" onClick={closeChart}>
           卖出
         </button>
       </div>
@@ -201,8 +201,8 @@ function CandleChart() {
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: 'rgba(60, 70, 86, 0.45)' },
-        horzLines: { color: 'rgba(60, 70, 86, 0.45)' },
+        vertLines: { color: 'rgba(43, 49, 57, 0.68)' },
+        horzLines: { color: 'rgba(43, 49, 57, 0.68)' },
       },
       rightPriceScale: {
         borderVisible: false,
@@ -220,12 +220,12 @@ function CandleChart() {
     });
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: '#2fbe85',
-      downColor: '#f6475d',
+      upColor: '#0ecb81',
+      downColor: '#f6465d',
       borderVisible: false,
-      wickUpColor: '#2fbe85',
-      wickDownColor: '#f6475d',
-      priceLineColor: '#f6475d',
+      wickUpColor: '#0ecb81',
+      wickDownColor: '#f6465d',
+      priceLineColor: '#f6465d',
       priceLineWidth: 1,
       lastValueVisible: true,
       priceLineVisible: true,
@@ -265,16 +265,16 @@ function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: Trade
     <div className="px-4 py-3.5">
       {isContract && (
         <Tabs value={positionMode} onValueChange={(value) => setPositionMode(value as ContractPositionMode)}>
-          <TabsList className="mb-3 grid h-12 w-full grid-cols-2 items-stretch gap-0 overflow-hidden rounded-lg bg-[#202733] p-0">
+          <TabsList className="mb-3 grid h-11 w-full grid-cols-2 items-stretch gap-0 overflow-hidden rounded-md bg-soft p-0">
             <TabsTrigger
               value="open"
-              className="h-full min-h-0 rounded-none border-0 py-0 text-[0.92rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-brand data-[state=active]:text-white dark:data-[state=active]:bg-brand dark:data-[state=active]:text-white"
+              className="h-full min-h-0 rounded-none border-0 py-0 text-[0.9rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-buy data-[state=active]:text-white dark:data-[state=active]:bg-buy dark:data-[state=active]:text-white"
             >
               开仓
             </TabsTrigger>
             <TabsTrigger
               value="close"
-              className="h-full min-h-0 rounded-none border-0 py-0 text-[0.92rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-danger data-[state=active]:text-white dark:data-[state=active]:bg-danger dark:data-[state=active]:text-white"
+              className="h-full min-h-0 rounded-none border-0 py-0 text-[0.9rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-sell data-[state=active]:text-white dark:data-[state=active]:bg-sell dark:data-[state=active]:text-white"
             >
               平仓
             </TabsTrigger>
@@ -346,8 +346,8 @@ function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: Trade
       )}
 
       <div className="grid grid-cols-2 gap-2.5">
-        <button className="rounded-lg bg-brand py-3 text-[1rem] font-semibold text-white transition active:brightness-90">{leftAction}</button>
-        <button className="rounded-lg bg-danger py-3 text-[1rem] font-semibold text-white transition active:brightness-90">{rightAction}</button>
+        <button className="rounded-md bg-buy py-3 text-[0.95rem] font-semibold text-white transition active:brightness-90">{leftAction}</button>
+        <button className="rounded-md bg-sell py-3 text-[0.95rem] font-semibold text-white transition active:brightness-90">{rightAction}</button>
       </div>
 
       {isContract ? (
@@ -489,7 +489,7 @@ function CheckRow({ label }: { label: string }) {
     <label className="flex items-center gap-2.5 text-[0.96rem] text-ink">
       <input className="sr-only" type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} />
       <span className={`grid size-[1.15rem] place-items-center rounded border ${checked ? 'border-brand bg-brand' : 'border-line bg-base2'}`}>
-        {checked && <span className="size-2 rounded-full bg-white" />}
+        {checked && <span className="size-2 rounded-full bg-primary-foreground" />}
       </span>
       {label}
     </label>
@@ -513,7 +513,7 @@ function OrderBook({ base = 'BTC', ticker, contract = false }: { base?: string; 
     <div className="min-w-0">
       <div className="mb-2 flex items-center justify-between">
         <div className="no-scrollbar flex min-w-0 gap-3 overflow-x-auto whitespace-nowrap text-[0.84rem]">
-          <button className="shrink-0 border-b-2 border-brand pb-1">盘口</button>
+        <button className="shrink-0 border-b-2 border-brand pb-1 text-ink">盘口</button>
           <button className="shrink-0 text-muted-foreground">最新成交</button>
         </div>
         <button className="rounded border border-line px-1.5 py-0.5 text-[0.68rem] text-muted-foreground">0.1</button>
@@ -528,7 +528,7 @@ function OrderBook({ base = 'BTC', ticker, contract = false }: { base?: string; 
         ))}
       </div>
       <div className="my-2.5 flex items-baseline justify-between border-y border-line/70 py-2">
-        <span className="font-mono text-[1.06rem] font-bold text-brand tabular-nums">{ticker.price}</span>
+        <span className="font-mono text-[1.06rem] font-bold text-sell tabular-nums">{ticker.price}</span>
         <span className="font-mono text-[0.72rem] text-muted-foreground tabular-nums">≈ {ticker.fiat}</span>
       </div>
       <div className="space-y-0.5 font-mono">
@@ -543,8 +543,8 @@ function OrderBook({ base = 'BTC', ticker, contract = false }: { base?: string; 
 function DepthRow({ price, amount, maxAmount, side }: { price: string; amount: string; maxAmount: number; side: 'buy' | 'sell' }) {
   const numericAmount = Number(amount.replace(/,/g, ''));
   const width = maxAmount > 0 ? Math.max(12, Math.min(100, (numericAmount / maxAmount) * 100)) : 0;
-  const depthColor = side === 'buy' ? 'bg-brand/8' : 'bg-danger/8';
-  const textColor = side === 'buy' ? 'text-brand' : 'text-danger';
+  const depthColor = side === 'buy' ? 'bg-buy/8' : 'bg-sell/8';
+  const textColor = side === 'buy' ? 'text-buy' : 'text-sell';
 
   return (
     <div className="relative grid h-5 grid-cols-2 items-center overflow-hidden px-1 text-[0.72rem] tabular-nums">
@@ -572,7 +572,7 @@ function MarketPicker({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="bottom">
-      <DrawerContent className="max-h-[92vh] overflow-hidden rounded-t-2xl border-line bg-[#15191f] p-0 text-ink shadow-2xl [&>div:first-child]:hidden">
+      <DrawerContent className="max-h-[92vh] overflow-hidden rounded-t-xl border-line bg-panel p-0 text-ink shadow-2xl [&>div:first-child]:hidden">
         <div className="relative flex h-14 items-center justify-center border-b border-line">
           <DrawerTitle className="text-[1.08rem] font-semibold text-ink">市场</DrawerTitle>
           <DrawerClose className="absolute right-4 top-1/2 -translate-y-1/2" aria-label="关闭市场选择">
@@ -631,7 +631,7 @@ function MarketPicker({
                 </div>
                 <div className="text-right">
                   <p className="font-mono text-[0.9rem] font-semibold text-ink tabular-nums">{row.price}</p>
-                  <p className={`mt-1 font-mono text-[0.78rem] tabular-nums ${row.change >= 0 ? 'text-[#04c9f4]' : 'text-danger'}`}>
+                  <p className={`mt-1 font-mono text-[0.78rem] tabular-nums ${row.change >= 0 ? 'text-buy' : 'text-sell'}`}>
                     {row.change >= 0 ? '+' : ''}{row.change.toFixed(2)}%
                   </p>
                 </div>

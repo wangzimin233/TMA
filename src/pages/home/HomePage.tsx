@@ -80,12 +80,12 @@ export function HomePage({
           })}
         </div>
 
-        <div className="rounded-md border border-line bg-panel px-4 py-3.5">
+        <div className="rounded-md border border-line bg-panel px-3.5 py-3">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-[0.72rem] text-muted-foreground">总资产折算</p>
               <div className="mt-1.5 flex items-end gap-2">
-                <span className="min-w-0 truncate font-mono text-[1.45rem] font-bold leading-none tabular-nums">
+                <span className="min-w-0 truncate font-mono text-[1.34rem] font-bold leading-none tabular-nums">
                   {totalAssetText}
                 </span>
                 <span className={`shrink-0 pb-0.5 font-mono text-[0.76rem] tabular-nums ${getSignedClass(accountOverview?.todayPnlValue)}`}>
@@ -97,14 +97,14 @@ export function HomePage({
               </p>
             </div>
             <button
-              className="rounded border border-line px-2.5 py-1.5 text-[0.72rem] text-muted-foreground"
+              className="rounded border border-line bg-base2 px-2.5 py-1.5 text-[0.72rem] text-muted-foreground"
               onClick={isLogin ? openProfile : openAuth}
             >
               {isLogin ? '资产' : '登录'}
             </button>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
-            <button className="rounded bg-brand py-2 text-[0.82rem] font-semibold text-white" onClick={openDeposit}>充值</button>
+            <button className="rounded bg-brand py-2 text-[0.82rem] font-semibold text-primary-foreground" onClick={openDeposit}>充值</button>
             <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold" onClick={openWithdraw}>提现</button>
             <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold" onClick={openTrade}>交易</button>
           </div>
@@ -144,8 +144,8 @@ function formatSigned(value?: number) {
 
 function getSignedClass(value?: number) {
   const normalizedValue = Number(value) || 0;
-  if (normalizedValue > 0) return 'text-brand';
-  if (normalizedValue < 0) return 'text-danger';
+  if (normalizedValue > 0) return 'text-buy';
+  if (normalizedValue < 0) return 'text-sell';
   return 'text-muted-foreground';
 }
 
@@ -159,7 +159,7 @@ function CoinCard({ pair }: { pair: MarketPair }) {
         <span className="truncate text-[0.92rem] font-semibold">{pair.base}</span>
       </div>
       <p className="mt-2.5 truncate font-mono text-[0.78rem] text-muted-foreground tabular-nums">{pair.fiat}</p>
-      <p className={`mt-1.5 font-mono text-[0.82rem] tabular-nums ${pair.change >= 0 ? 'text-brand' : 'text-danger'}`}>
+      <p className={`mt-1.5 font-mono text-[0.82rem] tabular-nums ${pair.change >= 0 ? 'text-buy' : 'text-sell'}`}>
         ↙ {Math.abs(pair.change).toFixed(2)}%
       </p>
     </div>

@@ -167,7 +167,7 @@ export function TransferPage({ onBack }: { onBack: () => void }) {
       {isError && (
         <div className="mt-4 rounded-md border border-line bg-panel px-3 py-4 text-center">
           <p className="text-[0.82rem] font-medium">资产加载失败</p>
-          <Button className="mt-3 h-8 bg-brand text-[#06130e]" onClick={() => refetch()}>
+          <Button className="mt-3 h-8 bg-brand text-primary-foreground" onClick={() => refetch()}>
             重新加载
           </Button>
         </div>
@@ -175,7 +175,7 @@ export function TransferPage({ onBack }: { onBack: () => void }) {
 
       <div className="mt-auto pt-6">
         <Button
-          className="h-12 w-full rounded-lg bg-brand text-[0.95rem] font-semibold text-[#06130e] hover:bg-brand/90 disabled:bg-brand/35 disabled:text-[#06130e]/55"
+          className="h-12 w-full rounded-lg bg-brand text-[0.95rem] font-semibold text-primary-foreground hover:bg-brand/90 disabled:bg-brand/35 disabled:text-primary-foreground/55"
           disabled={submitDisabled}
           onClick={submitTransfer}
         >
@@ -260,7 +260,7 @@ function FieldLabel({ children }: { children: string }) {
 
 function CoinAvatar({ coinCode }: { coinCode: string }) {
   return (
-    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand/90 text-[0.68rem] font-bold text-[#06130e]">
+    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand/90 text-[0.68rem] font-bold text-primary-foreground">
       {coinCode.slice(0, 2)}
     </span>
   );

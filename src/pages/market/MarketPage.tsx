@@ -56,10 +56,10 @@ export function MarketPage({ openTrade }: { openTrade: () => void }) {
               <p className="mt-1 text-[0.72rem] text-muted-foreground">Vol {row.volume}</p>
             </div>
             <div className="min-w-0 text-right">
-              <p className={`font-mono text-[0.96rem] tabular-nums ${row.change >= 0 ? 'text-brand' : 'text-danger'}`}>{row.price}</p>
+              <p className={`font-mono text-[0.96rem] tabular-nums ${row.change >= 0 ? 'text-buy' : 'text-sell'}`}>{row.price}</p>
               <p className="mt-1 font-mono text-[0.7rem] text-muted-foreground tabular-nums">{row.fiat}</p>
             </div>
-            <span className={`ml-2 rounded px-1.5 py-1.5 text-center font-mono text-[0.78rem] font-semibold text-white tabular-nums ${row.change >= 0 ? 'bg-brand' : 'bg-danger'}`}>
+            <span className={`ml-2 rounded px-1.5 py-1.5 text-center font-mono text-[0.78rem] font-semibold text-white tabular-nums ${row.change >= 0 ? 'bg-buy' : 'bg-sell'}`}>
               {row.change >= 0 ? '+' : ''}
               {row.change.toFixed(2)}%
             </span>

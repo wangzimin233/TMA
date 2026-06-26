@@ -1,3 +1,3 @@
 export function CoinDot() {
-  return <span className="grid size-5 place-items-center rounded-full bg-[#F7931A] text-xs font-bold text-white">฿</span>;
+  return <span className="grid size-5 place-items-center rounded-full bg-brand text-xs font-bold text-primary-foreground">฿</span>;
 }

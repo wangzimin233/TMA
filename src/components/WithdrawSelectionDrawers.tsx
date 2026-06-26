@@ -71,7 +71,7 @@ export function WithdrawSelectionDrawers({
               <div className="mx-2 rounded-md border border-line bg-panel px-3 py-4 text-center">
                 <p className="text-[0.82rem] font-medium text-ink">资产列表加载失败</p>
                 <p className="mt-1 text-[0.72rem] text-muted-foreground">请检查网络后重试</p>
-                <Button className="mt-3 h-8 bg-brand text-[#06130e]" onClick={() => refetch()}>
+                <Button className="mt-3 h-8 bg-brand text-primary-foreground" onClick={() => refetch()}>
                   重新加载
                 </Button>
               </div>

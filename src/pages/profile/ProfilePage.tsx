@@ -51,9 +51,9 @@ export function ProfilePage({
     <section className="px-4 pt-3.5">
       <div className="border-b border-line pb-3.5">
         <div className="flex items-center gap-2">
-          <div className="grid size-11 shrink-0 place-items-center rounded-lg border border-line bg-[radial-gradient(circle,#253449,#111821)] text-xl">👤</div>
+          <div className="grid size-10 shrink-0 place-items-center rounded-lg border border-line bg-soft text-[1.05rem] text-brand">👤</div>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[1.12rem] font-semibold leading-tight">{displayName}</h1>
+            <h1 className="truncate text-[1.02rem] font-semibold leading-tight">{displayName}</h1>
             <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[0.72rem] text-muted-foreground">
               <span className="inline-flex h-5 shrink-0 items-center rounded bg-brand px-1.5 text-[0.66rem] font-semibold leading-none text-white whitespace-nowrap">
                 LV {userLevel}
@@ -187,7 +187,7 @@ function AccountAssetModule({
         <div className={showFundActions ? 'mt-4 grid grid-cols-3 gap-2' : 'mt-4'}>
           {showFundActions && (
             <>
-              <Button className="h-10 rounded-md bg-brand text-[0.86rem] font-semibold text-[#06130e] hover:bg-brand/90" onClick={openDeposit}>
+              <Button className="h-10 rounded-md bg-brand text-[0.86rem] font-semibold text-primary-foreground hover:bg-brand/90" onClick={openDeposit}>
                 充值
               </Button>
               <Button className="h-10 rounded-md bg-soft text-[0.86rem] font-semibold text-ink hover:bg-soft2" onClick={openWithdraw}>
@@ -214,7 +214,7 @@ function AccountAssetModule({
           {isError && (
             <div className="rounded-md border border-line bg-panel px-3 py-4 text-center">
               <p className="text-[0.82rem] font-medium">资产列表加载失败</p>
-              <Button className="mt-3 h-8 bg-brand text-[#06130e]" onClick={() => refetch()}>
+              <Button className="mt-3 h-8 bg-brand text-primary-foreground" onClick={() => refetch()}>
                 重新加载
               </Button>
             </div>
@@ -310,7 +310,7 @@ function AssetMetric({ label, value, signed = false }: { label: string; value: n
 
 function CoinAvatar({ coinCode }: { coinCode: string }) {
   return (
-    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand/90 text-[0.68rem] font-bold text-[#06130e]">
+    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand text-[0.68rem] font-bold text-primary-foreground">
       {coinCode.slice(0, 2)}
     </span>
   );
@@ -374,8 +374,8 @@ function formatSigned(value?: number) {
 
 function getSignedClass(value?: number) {
   const normalizedValue = Number(value) || 0;
-  if (normalizedValue > 0) return 'text-brand';
-  if (normalizedValue < 0) return 'text-danger';
+  if (normalizedValue > 0) return 'text-buy';
+  if (normalizedValue < 0) return 'text-sell';
   return 'text-muted-foreground';
 }
 

@@ -329,7 +329,7 @@ export function WithdrawPage({ coin, network, onBack }: WithdrawPageProps) {
             {ordersQuery.isError && (
               <div className="px-3 py-5 text-center">
                 <p className="text-[0.78rem] text-muted-foreground">提现记录加载失败</p>
-                <Button className="mt-3 h-8 bg-brand text-[#06130e]" onClick={() => ordersQuery.refetch()}>
+                <Button className="mt-3 h-8 bg-brand text-primary-foreground" onClick={() => ordersQuery.refetch()}>
                   重新加载
                 </Button>
               </div>
@@ -424,7 +424,7 @@ function SecurityStateCard({
           <p className="text-[0.86rem] font-semibold text-ink">{title}</p>
           <p className="mt-1 text-[0.74rem] leading-relaxed text-muted-foreground">{description}</p>
           {actionLabel && onAction && (
-            <Button className="mt-3 h-8 rounded-md bg-brand px-3 text-[0.74rem] font-semibold text-[#06130e]" onClick={onAction}>
+            <Button className="mt-3 h-8 rounded-md bg-brand px-3 text-[0.74rem] font-semibold text-primary-foreground" onClick={onAction}>
               {actionLabel}
             </Button>
           )}
@@ -525,7 +525,7 @@ function GoogleAuthBindPanel({
                 disabled={!bindInfo.secret}
                 onClick={onCopySecret}
               >
-                {secretCopied ? <Check className="size-4 text-brand" /> : <Copy className="size-4" />}
+                {secretCopied ? <Check className="size-4 text-buy" /> : <Copy className="size-4" />}
               </Button>
             </div>
           </div>
@@ -686,8 +686,8 @@ function normalizeAmountInput(value: string) {
 function getOrderStatus(status: number) {
   if (status === 1) return { label: '待广播', className: 'bg-warning/10 text-warning' };
   if (status === 2) return { label: '处理中', className: 'bg-warning/10 text-warning' };
-  if (status === 3) return { label: '成功', className: 'bg-brand/10 text-brand' };
-  if (status === 4) return { label: '失败', className: 'bg-danger/10 text-danger' };
+  if (status === 3) return { label: '成功', className: 'bg-buy/10 text-buy' };
+  if (status === 4) return { label: '失败', className: 'bg-sell/10 text-sell' };
   if (status === 5) return { label: '已取消', className: 'bg-soft text-muted-foreground' };
   return { label: '待审核', className: 'bg-warning/10 text-warning' };
 }
