@@ -172,7 +172,7 @@ export function AuthPage({ onBack, onSuccess }: { onBack: () => void; onSuccess:
 
         <div className="mt-3 rounded-md border border-line bg-panel p-3">
           <Tabs value={authTab} onValueChange={(value) => setAuthTab(value as AuthTab)}>
-            <TabsList className="grid h-9 w-full grid-cols-2 items-stretch gap-0 overflow-hidden rounded-md border border-line bg-base2 p-[2px]">
+            <TabsList className="grid h-11 w-full grid-cols-2 items-stretch gap-0 overflow-hidden rounded-md border border-line bg-base2 p-[2px]">
               <TabsTrigger
                 value="login"
                 className="h-full min-h-0 rounded-[4px] border-0 py-0 text-[0.78rem] font-semibold text-muted-foreground shadow-none transition after:hidden active:scale-95 data-[state=active]:bg-brand data-[state=active]:text-primary-foreground dark:data-[state=active]:bg-brand dark:data-[state=active]:text-primary-foreground"
@@ -189,23 +189,31 @@ export function AuthPage({ onBack, onSuccess }: { onBack: () => void; onSuccess:
           </Tabs>
 
           {!isRegister && (
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {(['PASSWORD', 'CODE'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={`h-9 rounded border px-3 text-[0.78rem] font-semibold transition active:scale-[0.98] ${
-                    loginMode === mode ? 'border-brand bg-brand/10 text-brand' : 'border-line bg-base2 text-muted-foreground'
-                  }`}
-                  onClick={() => setLoginMode(mode)}
-                >
-                  {mode === 'PASSWORD' ? '密码登录' : '验证码登录'}
-                </button>
-              ))}
+            <div className="mt-3 flex min-w-0 items-center justify-between gap-3 border-b border-line pb-3">
+              <span className="shrink-0 text-[0.74rem] text-muted-foreground">登录方式</span>
+              <div className="flex min-w-0 items-center gap-3 text-[0.78rem] font-semibold">
+                {(['PASSWORD', 'CODE'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`relative shrink-0 py-1 transition active:scale-[0.98] ${
+                      loginMode === mode ? 'text-brand' : 'text-muted-foreground'
+                    }`}
+                    onClick={() => setLoginMode(mode)}
+                  >
+                    {mode === 'PASSWORD' ? '密码登录' : '验证码登录'}
+                    <span
+                      className={`absolute inset-x-0 -bottom-0.5 mx-auto h-px rounded-full bg-brand transition-all ${
+                        loginMode === mode ? 'w-full opacity-100' : 'w-0 opacity-0'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          <div className="mt-4 space-y-3.5">
+          <div className={`${isRegister ? 'mt-4' : 'mt-3.5'} space-y-3.5`}>
             <Field label="邮箱" error={errors.email?.message}>
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

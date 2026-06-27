@@ -1,9 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  Blocks,
   Bot,
-  Gift,
-  Headphones,
   LineChart,
   UserRoundPlus,
   WalletCards,
@@ -53,13 +50,9 @@ export type DepositRecord = {
 
 export const quickActions: QuickAction[] = [
   { label: '邀请好友', icon: UserRoundPlus },
-  { label: '福利中心', icon: Gift, hot: true },
   { label: '充值', icon: WalletCards },
   { label: '合约', icon: LineChart },
   { label: '现货', icon: Bot, hot: true },
-  { label: 'Superpairs', icon: Blocks },
-  { label: '更多', icon: Blocks },
-  { label: '客服', icon: Headphones },
 ];
 
 export const tickerSource: MarketTicker[] = [

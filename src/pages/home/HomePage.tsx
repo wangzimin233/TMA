@@ -41,6 +41,7 @@ export function HomePage({
   const { data: marketPairs = [] } = useHomeMarkets();
   const { data: accountOverview } = useAccountOverview(isLogin);
   const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
+  const setTradeMode = useTradeStore((state) => state.setTradeMode);
   const setShowChart = useTradeStore((state) => state.setShowChart);
   const valuationCoinCode = accountOverview?.valuationCoinCode ?? 'USDT';
   const totalAssetText = isLogin && accountOverview ? formatValuation(accountOverview.estimatedTotalValue, valuationCoinCode) : '--';
@@ -49,6 +50,12 @@ export function HomePage({
 
   const openPair = (symbol: string) => {
     setCurrentSymbol(symbol);
+    setShowChart(false);
+    openTrade();
+  };
+
+  const openTradeMode = (mode: 'spot' | 'contract') => {
+    setTradeMode(mode);
     setShowChart(false);
     openTrade();
   };
@@ -64,7 +71,15 @@ export function HomePage({
               <button
                 key={action.label}
                 className="group flex min-w-0 flex-col items-center gap-1.5 text-center"
-                onClick={action.label === '充值' ? openDeposit : action.label === '合约' || action.label === '现货' ? openTrade : undefined}
+                onClick={
+                  action.label === '充值'
+                    ? openDeposit
+                    : action.label === '合约'
+                      ? () => openTradeMode('contract')
+                      : action.label === '现货'
+                        ? () => openTradeMode('spot')
+                        : undefined
+                }
               >
                 <span className="relative grid size-9 place-items-center rounded-md border border-line bg-panel text-ink transition group-active:scale-95">
                   {action.hot && (
@@ -88,10 +103,13 @@ export function HomePage({
                 <span className="min-w-0 truncate font-mono text-[1.34rem] font-bold leading-none tabular-nums">
                   {totalAssetText}
                 </span>
-                <span className={`shrink-0 pb-0.5 font-mono text-[0.76rem] tabular-nums ${getSignedClass(accountOverview?.todayPnlValue)}`}>
+              </div>
+              <p className="mt-1.5 text-[0.72rem] text-muted-foreground">
+                今日盈亏{' '}
+                <span className={`font-mono tabular-nums ${getSignedClass(accountOverview?.todayPnlValue)}`}>
                   {pnlText}
                 </span>
-              </div>
+              </p>
               <p className="mt-1 font-mono text-[0.72rem] text-muted-foreground tabular-nums">
                 {estimatedText}
               </p>

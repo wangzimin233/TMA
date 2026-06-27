@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { fetchTradeUser } from './api/auth';
@@ -8,6 +8,7 @@ import type { WithdrawCoin, WithdrawNetwork } from './api/withdraw';
 import { BottomNav } from './components/BottomNav';
 import { DepositSelectionDrawers } from './components/DepositSelectionDrawers';
 import { LeverageModal } from './components/LeverageModal';
+import { PageTransition, type PageMotionKind } from './components/PageTransition';
 import { WithdrawSelectionDrawers } from './components/WithdrawSelectionDrawers';
 import { Toaster } from './components/ui/sonner';
 import { useDepositCoins } from './hooks/useDepositQueries';
@@ -27,12 +28,14 @@ import { useTradeStore } from './store/trade.store';
 
 const protectedPaths = new Set(['/profile', '/profile/records', '/profile/settings', '/deposit', '/withdraw', '/transfer']);
 const tabPaths = new Set(['/', '/market', '/trade', '/profile']);
+const tabPathOrder = ['/', '/market', '/trade', '/profile'];
 
 function App() {
   const [showAuth, setShowAuth] = useState(false);
   const [showLeverage, setShowLeverage] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const previousPathRef = useRef(location.pathname);
   const token = useAuthStore((state) => state.token);
   const isLogin = useAuthStore((state) => state.isLogin);
   const isHydrating = useAuthStore((state) => state.isHydrating);
@@ -45,6 +48,16 @@ function App() {
   const setShowChart = useTradeStore((state) => state.setShowChart);
   const isProtectedRoute = protectedPaths.has(location.pathname);
   const showBottomNav = tabPaths.has(location.pathname) && !showAuth && !(isProtectedRoute && !isLogin);
+  const routeMotionKind = useMemo<PageMotionKind>(() => {
+    if (showAuth) return 'fade';
+
+    return getRouteMotionKind(previousPathRef.current, location.pathname);
+  }, [location.pathname, showAuth]);
+  const routeKey = showAuth ? `auth:${location.pathname}` : location.pathname;
+
+  useEffect(() => {
+    previousPathRef.current = location.pathname;
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!token) {
@@ -198,7 +211,9 @@ function App() {
   return (
     <div className="min-h-screen bg-app text-ink">
       <main className="mx-auto min-h-screen w-full min-w-0 max-w-[430px] overflow-hidden bg-base pb-[calc(70px+env(safe-area-inset-bottom))] shadow-2xl shadow-black/35 max-[480px]:shadow-none">
-        {routes}
+        <PageTransition routeKey={routeKey} motionKind={routeMotionKind}>
+          {routes}
+        </PageTransition>
         {showBottomNav && <BottomNav />}
       </main>
       {showLeverage && <LeverageModal onClose={() => setShowLeverage(false)} />}
@@ -399,6 +414,19 @@ function RouteError({ title, onRetry, onBack }: { title: string; onRetry: () => 
 
 function normalizeParam(value?: string | null) {
   return value?.trim().toUpperCase() || '';
+}
+
+function getRouteMotionKind(previousPath: string, nextPath: string): PageMotionKind {
+  const previousTabIndex = tabPathOrder.indexOf(previousPath);
+  const nextTabIndex = tabPathOrder.indexOf(nextPath);
+
+  if (previousTabIndex >= 0 && nextTabIndex >= 0 && previousTabIndex !== nextTabIndex) {
+    return nextTabIndex > previousTabIndex ? 'tab-forward' : 'tab-back';
+  }
+
+  if (previousPath === nextPath) return 'fade';
+
+  return 'stack';
 }
 
 export default App;
