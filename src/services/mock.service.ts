@@ -1,16 +1,6 @@
-import { depositNetworks, depositRecords, marketPairs, marketRows } from '../data/mock';
+import { depositNetworks, depositRecords } from '../data/mock';
 
 const wait = (ms = 180) => new Promise((resolve) => window.setTimeout(resolve, ms));
-
-export async function getMockHomeMarkets() {
-  await wait();
-  return marketPairs;
-}
-
-export async function getMockMarketRows() {
-  await wait();
-  return marketRows;
-}
 
 export async function getMockAssets() {
   await wait();

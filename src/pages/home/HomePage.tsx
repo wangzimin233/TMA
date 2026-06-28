@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { BrandHeader } from '../../components/BrandHeader';
 import { MarketLine } from '../../components/MarketLine';
 import { ChevronDown } from 'lucide-react';
@@ -10,18 +10,15 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 import { quickActions } from '../../data/mock';
-import type { MarketPair } from '../../data/mock';
 import { useAccountOverview } from '../../hooks/useAccountQueries';
-import { useHomeMarkets } from '../../hooks/useMockQueries';
+import { useSpotMarketList, useSpotFavorites } from '../../hooks/useSpotQueries';
+import { useMarketUiStore, type HomeMarketTab, type HomeMarketTypeFilter } from '../../store/market-ui.store';
 import { useTradeStore } from '../../store/trade.store';
+import { symbolFormat } from '../../lib/utils';
+import type { MarketPairView } from '../../types/app';
 
-const homeMarketTabs = ['自选', '热门', '涨幅榜', '跌幅榜'] as const;
-const marketTypeFilters = ['全部', '现货', '合约'] as const;
-const spotMarketBases = ['BTC', 'ETH', 'BGB', 'XRP', 'SOL', 'BNB', 'DOGE', 'ADA'];
-const futuresMarketBases = ['BTC', 'ETH', 'SOL', 'DOGE', 'SUI', 'NEAR', 'OP', 'AVAX', 'LINK', 'ARB'];
-
-type HomeMarketTab = (typeof homeMarketTabs)[number];
-type MarketTypeFilter = (typeof marketTypeFilters)[number];
+const homeMarketTabs = ['自选', '热门', '涨幅榜', '跌幅榜'] as const satisfies readonly HomeMarketTab[];
+const marketTypeFilters = ['全部', '现货', '合约'] as const satisfies readonly HomeMarketTypeFilter[];
 
 export function HomePage({
   isLogin,
@@ -38,7 +35,8 @@ export function HomePage({
   openTrade: () => void;
   openProfile: () => void;
 }) {
-  const { data: marketPairs = [] } = useHomeMarkets();
+  // 查询热门币种前3个
+  const { data: hotMarkets = [] } = useSpotMarketList({ tab: 'HOT', limit: 3 });
   const { data: accountOverview } = useAccountOverview(isLogin);
   const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
   const setTradeMode = useTradeStore((state) => state.setTradeMode);
@@ -48,8 +46,9 @@ export function HomePage({
   const pnlText = isLogin && accountOverview ? `${formatSigned(accountOverview.todayPnlValue)} ${valuationCoinCode}` : '--';
   const estimatedText = isLogin && accountOverview ? `≈ ${formatNumber(accountOverview.estimatedTotalValue)} ${valuationCoinCode}` : '--';
 
-  const openPair = (symbol: string) => {
-    setCurrentSymbol(symbol);
+  const openPair = (symbolCode: string) => {
+    const normalizedSymbol = symbolFormat.normalize(symbolCode);
+    setCurrentSymbol(normalizedSymbol);
     setShowChart(false);
     openTrade();
   };
@@ -59,6 +58,9 @@ export function HomePage({
     setShowChart(false);
     openTrade();
   };
+
+  // 确保是数组类型
+  const hotMarketsArray = Array.isArray(hotMarkets) ? hotMarkets : [];
 
   return (
     <section>
@@ -129,9 +131,20 @@ export function HomePage({
         </div>
 
         <div className="grid grid-cols-3 gap-2.5">
-          {marketPairs.slice(0, 3).map((pair) => (
-            <button key={pair.symbol} className="text-left" onClick={() => openPair(pair.symbol)}>
-              <CoinCard pair={pair} />
+          {hotMarketsArray.slice(0, 3).map((item) => (
+            <button key={item.symbolCode} className="text-left" onClick={() => openPair(item.symbolCode)}>
+              <CoinCard
+                pair={{
+                  symbol: symbolFormat.normalize(item.symbolCode),
+                  base: item.baseCoinCode,
+                  quote: item.quoteCoinCode,
+                  price: formatPrice(item.lastPrice),
+                  fiat: `$${formatPrice(item.lastPrice)}`,
+                  change: item.priceChangePercent,
+                  volume: formatVolume(item.volume),
+                  iconColor: '#F7931A', // 默认颜色
+                }}
+              />
             </button>
           ))}
         </div>
@@ -167,7 +180,21 @@ function getSignedClass(value?: number) {
   return 'text-muted-foreground';
 }
 
-function CoinCard({ pair }: { pair: MarketPair }) {
+function formatPrice(price: number): string {
+  if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (price >= 1) return price.toFixed(2);
+  if (price >= 0.01) return price.toFixed(4);
+  return price.toFixed(6);
+}
+
+function formatVolume(volume: number): string {
+  if (volume >= 1000000000) return `${(volume / 1000000000).toFixed(2)}B`;
+  if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
+  if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
+  return volume.toFixed(2);
+}
+
+function CoinCard({ pair }: { pair: MarketPairView }) {
   return (
     <div className="min-w-0 rounded-md border border-line bg-panel p-2.5">
       <div className="flex min-w-0 items-center gap-2">
@@ -184,29 +211,35 @@ function CoinCard({ pair }: { pair: MarketPair }) {
   );
 }
 
-function MarketPreview({ openPair }: { openPair: (symbol: string) => void }) {
-  const { data: marketPairs = [] } = useHomeMarkets();
-  const [activeTab, setActiveTab] = useState<HomeMarketTab>('自选');
-  const [marketType, setMarketType] = useState<MarketTypeFilter>('全部');
-  const displayedPairs = useMemo(() => {
-    const pairs = marketPairs.filter((pair) => {
-      if (marketType === '现货') return spotMarketBases.includes(pair.base);
-      if (marketType === '合约') return futuresMarketBases.includes(pair.base);
-      return true;
-    });
+function MarketPreview({ openPair }: { openPair: (symbolCode: string) => void }) {
+  const activeTab = useMarketUiStore((state) => state.homeMarketTab);
+  const marketType = useMarketUiStore((state) => state.homeMarketType);
+  const setActiveTab = useMarketUiStore((state) => state.setHomeMarketTab);
+  const setMarketType = useMarketUiStore((state) => state.setHomeMarketType);
 
-    switch (activeTab) {
-      case '热门':
-        return [...pairs].sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 5);
-      case '涨幅榜':
-        return [...pairs].sort((a, b) => b.change - a.change).slice(0, 5);
-      case '跌幅榜':
-        return [...pairs].sort((a, b) => a.change - b.change).slice(0, 5);
-      case '自选':
-      default:
-        return pairs.slice(0, 5);
+  // 根据 activeTab 查询不同数据
+  const tabMap = {
+    '自选': undefined,
+    '热门': 'HOT' as const,
+    '涨幅榜': 'GAINERS' as const,
+    '跌幅榜': 'LOSERS' as const,
+  };
+
+  const { data: marketList = [] } = useSpotMarketList(
+    activeTab !== '自选' ? { tab: tabMap[activeTab], limit: 5 } : undefined
+  );
+  const { data: favoriteList = [] } = useSpotFavorites();
+
+  const displayedPairs = useMemo(() => {
+    const sourceList = activeTab === '自选' ? favoriteList : marketList;
+    const sourceArray = Array.isArray(sourceList) ? sourceList : [];
+
+    if (marketType === '合约') {
+      return [];
     }
-  }, [activeTab, marketPairs, marketType]);
+
+    return sourceArray.slice(0, 5);
+  }, [activeTab, marketType, marketList, favoriteList]);
 
   return (
     <div>
@@ -248,7 +281,7 @@ function MarketPreview({ openPair }: { openPair: (symbol: string) => void }) {
             sideOffset={6}
             className="min-w-[5.5rem] rounded-md border border-line bg-panel p-1 text-[0.76rem] text-ink shadow-lg shadow-app/40 ring-0"
           >
-            <DropdownMenuRadioGroup value={marketType} onValueChange={(value) => setMarketType(value as MarketTypeFilter)}>
+            <DropdownMenuRadioGroup value={marketType} onValueChange={(value) => setMarketType(value as HomeMarketTypeFilter)}>
               {marketTypeFilters.map((filter) => (
                 <DropdownMenuRadioItem
                   key={filter}
@@ -265,11 +298,28 @@ function MarketPreview({ openPair }: { openPair: (symbol: string) => void }) {
         <span className="text-right">24h涨跌</span>
       </div>
       <div>
-        {displayedPairs.map((pair) => (
-          <button key={pair.symbol} className="block w-full text-left" onClick={() => openPair(pair.symbol)}>
-            <MarketLine pair={pair} />
-          </button>
-        ))}
+        {displayedPairs.length === 0 ? (
+          <div className="py-10 text-center text-[0.9rem] text-muted-foreground">
+            {activeTab === '自选' && marketType !== '合约' ? '暂无自选' : '暂无数据'}
+          </div>
+        ) : (
+          displayedPairs.map((item) => (
+            <button key={item.symbolCode} className="block w-full text-left" onClick={() => openPair(item.symbolCode)}>
+              <MarketLine
+                pair={{
+                  symbol: symbolFormat.normalize(item.symbolCode),
+                  base: item.baseCoinCode,
+                  quote: item.quoteCoinCode,
+                  price: formatPrice(item.lastPrice),
+                  fiat: `$${formatPrice(item.lastPrice)}`,
+                  change: item.priceChangePercent,
+                  volume: formatVolume(item.volume),
+                  iconColor: '#F7931A',
+                }}
+              />
+            </button>
+          ))
+        )}
       </div>
     </div>
   );

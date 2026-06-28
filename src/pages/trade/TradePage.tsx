@@ -1,16 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
-import { Bell, Calculator, CandlestickChart, ChevronDown, FileText, Info, Search, Star, WalletCards, X } from 'lucide-react';
-import { CandlestickSeries, ColorType, createChart, type UTCTimestamp } from 'lightweight-charts';
-import { getTickerBySymbol, marketPairs } from '../../data/mock';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Bell, Calculator, CandlestickChart, ChevronDown, Columns2, FileText, Info, PanelBottom, PanelTop, Search, Star, WalletCards, X } from 'lucide-react';
+import { CandlestickSeries, ColorType, createChart, type CandlestickData, type IChartApi, type ISeriesApi, type LogicalRange, type UTCTimestamp } from 'lightweight-charts';
 import { CoinDot } from '../../components/CoinDot';
 import { Drawer, DrawerClose, DrawerContent, DrawerTitle } from '../../components/ui/drawer';
 import { Slider } from '../../components/ui/slider';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { useTradeStore } from '../../store/trade.store';
-import type { TradeMode } from '../../types/app';
+import type { SpotDepthLevel, SpotKlineParams, SpotSummary, SpotTrade, TradeMode } from '../../types/app';
+import { useSpotFavoriteStatus, useToggleSpotFavorite, useSpotSummary, useInfiniteSpotKlines, useSpotDepth, useSpotMarketList, useSpotTrades } from '../../hooks/useSpotQueries';
+import { symbolFormat } from '../../lib/utils';
+
+const KLINE_INTERVALS: SpotKlineParams['interval'][] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
+const KLINE_PAGE_LIMIT = 500;
 
 type OrderType = 'limit' | 'market';
 type ContractPositionMode = 'open' | 'close';
+type OrderBookTab = 'book' | 'trades';
+type DepthViewMode = 'both' | 'buy' | 'sell';
+type TradeTicker = ReturnType<typeof formatSpotSummaryToTicker>;
 
 type TradePageProps = {
   mode: TradeMode;
@@ -24,11 +31,24 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
   const currentSymbol = useTradeStore((state) => state.currentSymbol);
   const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
   const [showMarketPicker, setShowMarketPicker] = useState(false);
-  const ticker = getTicker(currentSymbol);
+
+  const { data: spotSummary } = useSpotSummary(currentSymbol);
+  const ticker = spotSummary ? formatSpotSummaryToTicker(spotSummary) : undefined;
+
+  // 查询收藏状态
+  const { data: favoriteStatus } = useSpotFavoriteStatus(currentSymbol);
+  const { mutate: toggleFavorite } = useToggleSpotFavorite();
 
   const selectSymbol = (symbol: string) => {
     setCurrentSymbol(symbol);
     setShowMarketPicker(false);
+  };
+
+  const handleToggleFavorite = () => {
+    toggleFavorite({
+      symbol: currentSymbol,
+      favorited: favoriteStatus?.favorited ?? false,
+    });
   };
 
   return (
@@ -42,6 +62,8 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
           closeChart={() => setShowChart(false)}
           openLeverage={openLeverage}
           openMarketPicker={() => setShowMarketPicker(true)}
+          favoriteStatus={favoriteStatus}
+          onToggleFavorite={handleToggleFavorite}
         />
       ) : (
         <section>
@@ -52,17 +74,19 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
                 <CoinDot /> {currentSymbol} <ChevronDown className="size-4" />
               </button>
               <div className="flex items-center gap-3.5">
-                <button aria-label="收藏交易对">
-                  <Star className="size-5 fill-brand text-brand" />
+                <button aria-label="收藏交易对" onClick={handleToggleFavorite}>
+                  <Star className={`size-5 ${favoriteStatus?.favorited ? 'fill-brand text-brand' : 'text-muted-foreground'}`} />
                 </button>
                 <button aria-label="打开K线图" onClick={() => setShowChart(true)}>
                   <CandlestickChart className="size-5 text-brand" />
                 </button>
               </div>
             </div>
-            <p className={`mt-2.5 font-mono text-[1.52rem] font-bold leading-none tabular-nums ${ticker.change >= 0 ? 'text-buy' : 'text-sell'}`}>{mode === 'contract' ? ticker.price : ticker.spotPrice}</p>
+            <p className={`mt-2.5 font-mono text-[1.52rem] font-bold leading-none tabular-nums ${getChangeClass(ticker?.change)}`}>
+              {ticker ? (mode === 'contract' ? ticker.price : ticker.spotPrice) : '--'}
+            </p>
             <p className="mt-1.5 font-mono text-[0.78rem] text-muted-foreground tabular-nums">
-              ≈{ticker.fiat} <span className={ticker.change >= 0 ? 'text-buy' : 'text-sell'}>{ticker.changeText} {ticker.delta}</span>
+              ≈{ticker?.fiat ?? '--'} <span className={getChangeClass(ticker?.change)}>{ticker?.changeText ?? '--'} {ticker?.delta ?? '--'}</span>
             </p>
           </div>
           <BinanceOrderPanel mode={mode} symbol={currentSymbol} ticker={ticker} openLeverage={openLeverage} />
@@ -103,19 +127,22 @@ function ChartTradePage({
   closeChart,
   openLeverage,
   openMarketPicker,
+  favoriteStatus,
+  onToggleFavorite,
 }: {
   mode: TradeMode;
   setMode: (mode: TradeMode) => void;
   symbol: string;
-  ticker: ReturnType<typeof getTicker>;
+  ticker?: TradeTicker;
   closeChart: () => void;
   openLeverage: () => void;
   openMarketPicker: () => void;
+  favoriteStatus?: { symbolCode: string; favorited: boolean };
+  onToggleFavorite: () => void;
 }) {
   const base = symbol.split('/')[0] ?? 'BTC';
   const currentInterval = useTradeStore((state) => state.currentInterval);
   const setCurrentInterval = useTradeStore((state) => state.setCurrentInterval);
-  const intervals = ['15分', '30分', '1小时', '4小时', '1日', '周线'];
 
   return (
     <section>
@@ -126,8 +153,8 @@ function ChartTradePage({
             <CoinDot /> {symbol} <ChevronDown className="size-4" />
           </button>
           <div className="flex items-center gap-3.5">
-            <button aria-label="收藏交易对">
-              <Star className="size-5 fill-brand text-brand" />
+            <button aria-label="收藏交易对" onClick={onToggleFavorite}>
+              <Star className={`size-5 ${favoriteStatus?.favorited ? 'fill-brand text-brand' : 'text-muted-foreground'}`} />
             </button>
             <button aria-label={mode === 'contract' ? '调整杠杆' : '返回下单'} onClick={mode === 'contract' ? openLeverage : closeChart}>
               <CandlestickChart className="size-5 text-brand" />
@@ -136,16 +163,18 @@ function ChartTradePage({
         </div>
         <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
           <div>
-            <p className={`font-mono text-[1.38rem] font-bold leading-none tabular-nums ${ticker.change >= 0 ? 'text-buy' : 'text-sell'}`}>{mode === 'contract' ? ticker.price : ticker.spotPrice}</p>
+            <p className={`font-mono text-[1.38rem] font-bold leading-none tabular-nums ${getChangeClass(ticker?.change)}`}>
+              {ticker ? (mode === 'contract' ? ticker.price : ticker.spotPrice) : '--'}
+            </p>
             <p className="mt-1.5 font-mono text-[0.72rem] text-muted-foreground tabular-nums">
-              ≈{ticker.fiat} <span className={ticker.change >= 0 ? 'text-buy' : 'text-sell'}>{ticker.changeText} {ticker.delta}</span>
+              ≈{ticker?.fiat ?? '--'} <span className={getChangeClass(ticker?.change)}>{ticker?.changeText ?? '--'} {ticker?.delta ?? '--'}</span>
             </p>
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-right text-[0.68rem] text-muted-foreground">
-            <Stat label="24h最高" value={ticker.high} />
-            <Stat label={`24h量(${base})`} value={ticker.volume} />
-            <Stat label="24h最低" value={ticker.low} />
-            <Stat label="24h额(USDT)" value={ticker.turnover} />
+            <Stat label="24h最高" value={ticker?.high ?? '--'} />
+            <Stat label={`24h量(${base})`} value={ticker?.volume ?? '--'} />
+            <Stat label="24h最低" value={ticker?.low ?? '--'} />
+            <Stat label="24h额(USDT)" value={ticker?.turnover ?? '--'} />
           </div>
         </div>
       </div>
@@ -167,7 +196,7 @@ function ChartTradePage({
           </TabsList>
         </Tabs>
         <div className="no-scrollbar flex items-center gap-2 overflow-x-auto whitespace-nowrap bg-base2 px-4 py-2 text-[0.75rem] text-muted-foreground">
-          {intervals.map((item) => (
+          {KLINE_INTERVALS.map((item) => (
             <button key={item} className={currentInterval === item ? 'shrink-0 rounded bg-soft2 px-2.5 py-1.5 text-ink' : 'shrink-0 px-2 py-1.5'} onClick={() => setCurrentInterval(item)}>
               {item}
             </button>
@@ -184,7 +213,7 @@ function ChartTradePage({
         </button>
       </div>
       <div className="px-4 pb-24">
-        <OrderBook base={base} ticker={ticker} contract={mode === 'contract'} />
+        <OrderBook base={base} ticker={ticker} />
       </div>
     </section>
   );
@@ -201,6 +230,60 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function CandleChart() {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const fetchNextPageRef = useRef<(() => Promise<unknown>) | null>(null);
+  const canFetchMoreRef = useRef(false);
+  const isFetchingHistoryRef = useRef(false);
+  const fetchLockRef = useRef(false);
+  const lastHistoryFetchAtRef = useRef(0);
+  const initialFitKeyRef = useRef('');
+  const currentSymbol = useTradeStore((state) => state.currentSymbol);
+  const currentInterval = useTradeStore((state) => state.currentInterval);
+  const chartDataKey = `${currentSymbol}:${currentInterval}`;
+
+  const {
+    data: klinePages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+  } = useInfiniteSpotKlines({
+    symbol: currentSymbol,
+    interval: currentInterval,
+    limit: KLINE_PAGE_LIMIT,
+  });
+
+  const candleData = useMemo<CandlestickData<UTCTimestamp>[]>(() => {
+    const itemsByOpenTime = new Map<number, CandlestickData<UTCTimestamp>>();
+
+    for (const item of klinePages?.pages.flat() ?? []) {
+      itemsByOpenTime.set(item.openTime, {
+        time: Math.floor(item.openTime / 1000) as UTCTimestamp,
+        open: item.openPrice,
+        high: item.highPrice,
+        low: item.lowPrice,
+        close: item.closePrice,
+      });
+    }
+
+    return Array.from(itemsByOpenTime.entries())
+      .sort(([leftOpenTime], [rightOpenTime]) => leftOpenTime - rightOpenTime)
+      .map(([, item]) => item);
+  }, [klinePages]);
+
+  const hasKlines = candleData.length > 0;
+
+  useEffect(() => {
+    fetchNextPageRef.current = fetchNextPage as () => Promise<unknown>;
+    canFetchMoreRef.current = Boolean(hasNextPage);
+    isFetchingHistoryRef.current = isFetchingNextPage;
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  useEffect(() => {
+    initialFitKeyRef.current = '';
+    fetchLockRef.current = false;
+  }, [chartDataKey]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -244,20 +327,72 @@ function CandleChart() {
       priceLineVisible: true,
     });
 
-    series.setData(makeCandleData());
-    chart.timeScale().fitContent();
+    const handleVisibleRangeChange = (range: LogicalRange | null) => {
+      if (!range || range.from >= 20) return;
+      if (!canFetchMoreRef.current || isFetchingHistoryRef.current || fetchLockRef.current) return;
 
-    return () => chart.remove();
+      const now = Date.now();
+      fetchLockRef.current = true;
+      isFetchingHistoryRef.current = true;
+
+      if (now - lastHistoryFetchAtRef.current < 700) {
+        window.setTimeout(() => {
+          fetchLockRef.current = false;
+          isFetchingHistoryRef.current = false;
+        }, 700);
+        return;
+      }
+
+      lastHistoryFetchAtRef.current = now;
+      void fetchNextPageRef.current?.().finally(() => {
+        window.setTimeout(() => {
+          fetchLockRef.current = false;
+          isFetchingHistoryRef.current = false;
+        }, 300);
+      });
+    };
+
+    chartRef.current = chart;
+    seriesRef.current = series;
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+
+    return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    };
   }, []);
 
+  useEffect(() => {
+    if (!seriesRef.current || !chartRef.current) return;
+
+    seriesRef.current.setData(candleData);
+
+    if (candleData.length > 0 && initialFitKeyRef.current !== chartDataKey) {
+      chartRef.current.timeScale().fitContent();
+      initialFitKeyRef.current = chartDataKey;
+    }
+  }, [candleData, chartDataKey]);
+
   return (
-    <div className="h-[260px] border-b border-line bg-base">
+    <div className="relative h-[260px] border-b border-line bg-base">
       <div ref={containerRef} className="h-full w-full" />
+      {isFetchingNextPage && hasKlines && (
+        <div className="pointer-events-none absolute left-3 top-2 rounded bg-base2/90 px-2 py-1 text-[0.68rem] text-muted-foreground shadow-sm">
+          加载历史...
+        </div>
+      )}
+      {!hasKlines && (
+        <div className="pointer-events-none absolute inset-0 grid place-items-center text-[0.82rem] text-muted-foreground">
+          {isLoading ? 'K线加载中...' : '暂无K线数据'}
+        </div>
+      )}
     </div>
   );
 }
 
-function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: TradeMode; symbol: string; ticker: ReturnType<typeof getTicker>; openLeverage: () => void }) {
+function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: TradeMode; symbol: string; ticker?: TradeTicker; openLeverage: () => void }) {
   const base = symbol.split('/')[0] ?? 'BTC';
   const isContract = mode === 'contract';
   const [orderType, setOrderType] = useState<OrderType>('limit');
@@ -327,7 +462,7 @@ function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: Trade
           </div>
 
           <div className="mb-3">
-            <TradeInput value={ticker.price} suffix="USDT" compact emphasis />
+            <TradeInput value={ticker?.price ?? ''} suffix="USDT" compact emphasis />
           </div>
         </>
       ) : (
@@ -517,15 +652,24 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function OrderBook({ base = 'BTC', ticker, contract = false }: { base?: string; ticker: ReturnType<typeof getTicker>; contract?: boolean }) {
-  const sellRows = makeDepthRows(ticker.price, 'sell', contract);
-  const buyRows = makeDepthRows(ticker.price, 'buy', contract);
-  const maxAmount = Math.max(...sellRows.concat(buyRows).map(([, amount]) => Number(amount.replace(/,/g, ''))));
+function OrderBook({ base = 'BTC', ticker }: { base?: string; ticker?: TradeTicker }) {
+  const currentSymbol = useTradeStore((state) => state.currentSymbol);
+  const [activeTab, setActiveTab] = useState<OrderBookTab>('book');
+  const [depthView, setDepthView] = useState<DepthViewMode>('both');
+
+  const { data: depth, isLoading } = useSpotDepth(currentSymbol, 10);
+  const { data: trades = [], isLoading: tradesLoading } = useSpotTrades(currentSymbol, 50, activeTab === 'trades');
+
+  const sellRows = (depth?.asks ?? []).slice(0, depthView === 'both' ? 5 : 10).map(formatDepthRow);
+
+  const buyRows = (depth?.bids ?? []).slice(0, depthView === 'both' ? 5 : 10).map(formatDepthRow);
+
+  const maxAmount = Math.max(0, ...sellRows.concat(buyRows).map((row) => row.quantity));
 
   return (
     <div className="min-w-0">
       <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
-        <Tabs value="book" className="min-w-0 flex-1 gap-0">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as OrderBookTab)} className="min-w-0 flex-1 gap-0">
           <TabsList variant="line" className="no-scrollbar flex !h-6 min-w-0 justify-start gap-3 overflow-x-auto whitespace-nowrap p-0 text-[0.84rem] font-semibold leading-none">
             <TabsTrigger
               value="book"
@@ -541,33 +685,100 @@ function OrderBook({ base = 'BTC', ticker, contract = false }: { base?: string; 
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <button className="h-6 shrink-0 rounded border border-line px-1.5 text-[0.68rem] leading-none text-muted-foreground">0.1</button>
+        {activeTab === 'book' && (
+          <div className="flex shrink-0 items-center gap-1">
+            <div className="flex h-6 items-center overflow-hidden rounded border border-line bg-base2">
+              <DepthViewButton mode="both" activeMode={depthView} label="买盘+卖盘" onSelect={setDepthView} />
+              <DepthViewButton mode="buy" activeMode={depthView} label="买盘" onSelect={setDepthView} />
+              <DepthViewButton mode="sell" activeMode={depthView} label="卖盘" onSelect={setDepthView} />
+            </div>
+            <button className="h-6 shrink-0 rounded border border-line px-1.5 text-[0.68rem] leading-none text-muted-foreground">0.1</button>
+          </div>
+        )}
       </div>
-      <div className="grid grid-cols-2 gap-2 px-1 text-[0.68rem] text-muted-foreground">
-        <span>价(USDT)</span>
-        <span className="text-right">量({base})</span>
-      </div>
-      <div className="mt-1.5 space-y-0.5 font-mono">
-        {sellRows.map(([price, amount]) => (
-          <DepthRow key={price} price={price} amount={amount} maxAmount={maxAmount} side="sell" />
-        ))}
-      </div>
-      <div className="my-2.5 flex items-baseline justify-between border-y border-line/70 py-2">
-        <span className="font-mono text-[1.06rem] font-bold text-sell tabular-nums">{ticker.price}</span>
-        <span className="font-mono text-[0.72rem] text-muted-foreground tabular-nums">≈ {ticker.fiat}</span>
-      </div>
-      <div className="space-y-0.5 font-mono">
-        {buyRows.map(([price, amount]) => (
-          <DepthRow key={price} price={price} amount={amount} maxAmount={maxAmount} side="buy" />
-        ))}
-      </div>
+      {activeTab === 'book' ? (
+        <>
+          <div className="grid grid-cols-2 gap-2 px-1 text-[0.68rem] text-muted-foreground">
+            <span>价(USDT)</span>
+            <span className="text-right">量({base})</span>
+          </div>
+          {depthView !== 'buy' && <DepthRows rows={sellRows} side="sell" maxAmount={maxAmount} isLoading={isLoading} />}
+          <div className="my-2.5 flex items-baseline justify-between border-y border-line/70 py-2">
+            <span className={`font-mono text-[1.06rem] font-bold tabular-nums ${getChangeClass(ticker?.change)}`}>{ticker?.price ?? '--'}</span>
+            <span className="font-mono text-[0.72rem] text-muted-foreground tabular-nums">≈ {ticker?.fiat ?? '--'}</span>
+          </div>
+          {depthView !== 'sell' && <DepthRows rows={buyRows} side="buy" maxAmount={maxAmount} isLoading={isLoading} />}
+        </>
+      ) : (
+        <LatestTrades trades={trades} base={base} isLoading={tradesLoading} />
+      )}
     </div>
   );
 }
 
-function DepthRow({ price, amount, maxAmount, side }: { price: string; amount: string; maxAmount: number; side: 'buy' | 'sell' }) {
-  const numericAmount = Number(amount.replace(/,/g, ''));
-  const width = maxAmount > 0 ? Math.max(12, Math.min(100, (numericAmount / maxAmount) * 100)) : 0;
+function DepthViewButton({
+  mode,
+  activeMode,
+  label,
+  onSelect,
+}: {
+  mode: DepthViewMode;
+  activeMode: DepthViewMode;
+  label: string;
+  onSelect: (mode: DepthViewMode) => void;
+}) {
+  const Icon = mode === 'both' ? Columns2 : mode === 'buy' ? PanelBottom : PanelTop;
+  const active = mode === activeMode;
+
+  return (
+    <button
+      aria-label={label}
+      title={label}
+      className={`grid h-6 w-6 place-items-center border-r border-line last:border-r-0 transition-colors ${
+        active ? 'bg-soft2 text-ink' : 'text-muted-foreground hover:text-ink'
+      }`}
+      onClick={() => onSelect(mode)}
+      type="button"
+    >
+      <Icon className="size-3.5" />
+    </button>
+  );
+}
+
+function DepthRows({
+  rows,
+  side,
+  maxAmount,
+  isLoading,
+}: {
+  rows: ReturnType<typeof formatDepthRow>[];
+  side: 'buy' | 'sell';
+  maxAmount: number;
+  isLoading: boolean;
+}) {
+  return (
+    <div className={`${side === 'sell' ? 'mt-1.5' : ''} space-y-0.5 font-mono`}>
+      {rows.length > 0 ? (
+        rows.map((row) => (
+          <DepthRow key={`${side}-${row.price}`} price={row.price} amount={row.amount} quantity={row.quantity} maxAmount={maxAmount} side={side} />
+        ))
+      ) : (
+        <DepthEmptyRows label={isLoading ? '加载中' : side === 'sell' ? '暂无卖盘' : '暂无买盘'} />
+      )}
+    </div>
+  );
+}
+
+function DepthEmptyRows({ label }: { label: string }) {
+  return (
+    <div className="grid h-[6.375rem] place-items-center text-[0.72rem] text-muted-foreground">
+      {label}
+    </div>
+  );
+}
+
+function DepthRow({ price, amount, quantity, maxAmount, side }: { price: string; amount: string; quantity: number; maxAmount: number; side: 'buy' | 'sell' }) {
+  const width = maxAmount > 0 ? Math.max(12, Math.min(100, (quantity / maxAmount) * 100)) : 0;
   const depthColor = side === 'buy' ? 'bg-buy/8' : 'bg-sell/8';
   const textColor = side === 'buy' ? 'text-buy' : 'text-sell';
 
@@ -576,6 +787,33 @@ function DepthRow({ price, amount, maxAmount, side }: { price: string; amount: s
       <span className={`absolute inset-y-0 right-0 ${depthColor}`} style={{ width: `${width}%` }} />
       <span className={`relative ${textColor}`}>{price}</span>
       <span className="relative text-right text-ink">{amount}</span>
+    </div>
+  );
+}
+
+function LatestTrades({ trades, base, isLoading }: { trades: SpotTrade[]; base: string; isLoading: boolean }) {
+  return (
+    <div className="min-w-0">
+      <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_minmax(4.5rem,0.72fr)] gap-2 px-1 text-[0.68rem] text-muted-foreground">
+        <span>时间</span>
+        <span>价格(USDT)</span>
+        <span className="text-right">数量({base})</span>
+      </div>
+      <div className="mt-2 min-h-[10.75rem] space-y-1 font-mono">
+        {trades.length > 0 ? (
+          trades.map((trade) => (
+            <div key={trade.tradeId} className="grid h-5 grid-cols-[4.5rem_minmax(0,1fr)_minmax(4.5rem,0.72fr)] items-center gap-2 px-1 text-[0.72rem] tabular-nums">
+              <span className="text-ink/90">{formatTradeTime(trade.tradeTime)}</span>
+              <span className={trade.buyerMaker ? 'text-sell' : 'text-buy'}>{formatPriceString(trade.price)}</span>
+              <span className="text-right text-ink">{formatTradeQuantity(trade.quantity)}</span>
+            </div>
+          ))
+        ) : (
+          <div className="grid min-h-[10.75rem] place-items-center text-[0.72rem] text-muted-foreground">
+            {isLoading ? '加载中' : '暂无成交'}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -593,7 +831,12 @@ function MarketPicker({
 }) {
   const [query, setQuery] = useState('');
   const tabs = ['全部', '新币', '创新区', 'USDT', 'USDC'];
-  const rows = getMarketPickerRows().filter((row) => row.symbol.toLowerCase().includes(query.trim().toLowerCase()));
+  const normalizedQuery = query.trim();
+  const { data: marketList = [], isLoading } = useSpotMarketList({
+    keyword: normalizedQuery || undefined,
+    tab: 'ALL',
+  });
+  const rows = Array.isArray(marketList) ? marketList : [];
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="bottom">
@@ -639,25 +882,30 @@ function MarketPicker({
         </div>
 
         <div className="mt-2 max-h-[60vh] overflow-y-auto pb-6">
-          {rows.map((row) => {
-            const active = row.symbol === currentSymbol;
+          {isLoading ? (
+            <div className="py-12 text-center text-[0.82rem] text-muted-foreground">加载中...</div>
+          ) : rows.length === 0 ? (
+            <div className="py-12 text-center text-[0.82rem] text-muted-foreground">暂无交易对</div>
+          ) : rows.map((row) => {
+            const symbol = symbolFormat.normalize(row.symbolCode);
+            const active = symbol === currentSymbol;
             return (
               <button
-                key={row.symbol}
+                key={row.symbolCode}
                 className={`grid w-full grid-cols-[minmax(0,1fr)_128px] items-center px-4 py-3 text-left ${active ? 'bg-white/[0.035]' : ''}`}
-                onClick={() => onSelect(row.symbol)}
+                onClick={() => onSelect(symbol)}
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <Star className={`size-4 shrink-0 ${active ? 'fill-ink text-ink' : 'fill-muted-foreground text-muted-foreground'}`} />
-                  <span className="grid size-5 shrink-0 place-items-center rounded-full text-[0.62rem] font-bold text-white" style={{ background: row.iconColor }}>
-                    {row.base.slice(0, 1)}
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-brand text-[0.62rem] font-bold text-primary-foreground">
+                    {row.baseCoinCode.slice(0, 1)}
                   </span>
-                  <span className="truncate text-[0.95rem] font-semibold">{row.symbol}</span>
+                  <span className="truncate text-[0.95rem] font-semibold">{symbol}</span>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-[0.9rem] font-semibold text-ink tabular-nums">{row.price}</p>
-                  <p className={`mt-1 font-mono text-[0.78rem] tabular-nums ${row.change >= 0 ? 'text-buy' : 'text-sell'}`}>
-                    {row.change >= 0 ? '+' : ''}{row.change.toFixed(2)}%
+                  <p className="font-mono text-[0.9rem] font-semibold text-ink tabular-nums">{formatPriceString(row.lastPrice)}</p>
+                  <p className={`mt-1 font-mono text-[0.78rem] tabular-nums ${getChangeClass(row.priceChangePercent)}`}>
+                    {row.priceChangePercent >= 0 ? '+' : ''}{row.priceChangePercent.toFixed(2)}%
                   </p>
                 </div>
               </button>
@@ -667,61 +915,6 @@ function MarketPicker({
       </DrawerContent>
     </Drawer>
   );
-}
-
-function getMarketPickerRows() {
-  return marketPairs;
-}
-
-function getTicker(symbol: string) {
-  const ticker = getTickerBySymbol(symbol);
-  const changePrefix = ticker.change >= 0 ? '+' : '-';
-
-  return {
-    ...ticker,
-    spotPrice: ticker.price,
-    changeText: `${ticker.change >= 0 ? '+' : ''}${ticker.change.toFixed(2)}%`,
-    delta: `${changePrefix}${ticker.delta}`,
-  };
-}
-
-function makeDepthRows(price: string, side: 'buy' | 'sell', contract: boolean) {
-  const centerPrice = parsePrice(price);
-  const decimals = getPriceDecimals(price);
-  const step = getPriceStep(centerPrice, contract);
-  const amountSeeds = contract ? [1.245, 0.85, 0.42, 3.105, 2.1] : [0.125, 0.45, 1.2, 0.05, 0.21];
-
-  return amountSeeds.map((amount, index) => {
-    const level = index + 1;
-    const levelPrice = side === 'sell' ? centerPrice + step * level : centerPrice - step * level;
-
-    return [
-      formatPrice(levelPrice, decimals),
-      amount.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 }),
-    ];
-  });
-}
-
-function parsePrice(price: string) {
-  return Number(price.replace(/,/g, ''));
-}
-
-function getPriceDecimals(price: string) {
-  return price.includes('.') ? price.split('.')[1]?.length ?? 0 : 0;
-}
-
-function getPriceStep(price: number, contract: boolean) {
-  if (price >= 1000) return contract ? 1.5 : 1;
-  if (price >= 100) return contract ? 0.1 : 0.05;
-  if (price >= 1) return contract ? 0.01 : 0.005;
-  return contract ? 0.0002 : 0.0001;
-}
-
-function formatPrice(price: number, decimals: number) {
-  return price.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
 }
 
 function CurrentOrders() {
@@ -744,24 +937,89 @@ function CurrentOrders() {
   );
 }
 
-function makeCandleData() {
-  const baseTime = 1760000000;
-  const closes = [
-    61720, 61620, 61780, 61860, 62080, 62140, 62020, 61710, 61750, 61820, 61680, 61520,
-    61360, 61470, 61590, 61340, 61260, 61420, 61550, 61640, 61780, 61620, 61720, 61685,
-  ];
+/**
+ * 将 SpotSummary API 数据格式化为 ticker 格式
+ */
+function formatSpotSummaryToTicker(summary: SpotSummary) {
+  const base = summary.baseCoinCode;
+  const change = summary.priceChangePercent;
+  const changePrefix = change >= 0 ? '+' : '';
+  const previousPrice = change === -100 ? summary.lastPrice : summary.lastPrice / (1 + change / 100);
+  const delta = Math.abs(summary.lastPrice - previousPrice);
 
-  return closes.map((close, index) => {
-    const open = index === 0 ? 61760 : closes[index - 1];
-    const high = Math.max(open, close) + 70 + (index % 4) * 22;
-    const low = Math.min(open, close) - 75 - (index % 3) * 18;
+  return {
+    symbol: symbolFormat.normalize(summary.symbolCode),
+    base,
+    quote: summary.quoteCoinCode,
+    price: formatPriceString(summary.lastPrice),
+    spotPrice: formatPriceString(summary.lastPrice),
+    fiat: `$${formatPriceString(summary.lastPrice)}`,
+    change,
+    changeText: `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`,
+    delta: `${changePrefix}${formatPriceString(delta)}`,
+    high: formatPriceString(summary.highPrice),
+    low: formatPriceString(summary.lowPrice),
+    volume: formatVolume(summary.volume),
+    turnover: formatVolume(summary.quoteVolume),
+    iconColor: '#F7931A', // 默认颜色
+  };
+}
 
-    return {
-      time: (baseTime + index * 900) as UTCTimestamp,
-      open,
-      high,
-      low,
-      close,
-    };
+function formatPriceString(price: number): string {
+  if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (price >= 1) return price.toFixed(2);
+  if (price >= 0.01) return price.toFixed(4);
+  return price.toFixed(6);
+}
+
+function getChangeClass(change?: number): string {
+  if (typeof change !== 'number') return 'text-muted-foreground';
+  return change >= 0 ? 'text-buy' : 'text-sell';
+}
+
+function formatDepthRow(level: SpotDepthLevel) {
+  return {
+    price: formatPriceString(level.price),
+    amount: formatDepthQuantity(level.quantity),
+    quantity: level.quantity,
+  };
+}
+
+function formatDepthQuantity(quantity: number): string {
+  if (quantity >= 1_000_000_000) return `${trimFixed(quantity / 1_000_000_000, 2)}B`;
+  if (quantity >= 1_000_000) return `${trimFixed(quantity / 1_000_000, 2)}M`;
+  if (quantity >= 1_000) return `${trimFixed(quantity / 1_000, 2)}K`;
+  return formatDecimalWithoutScientific(quantity);
+}
+
+function formatTradeQuantity(quantity: number): string {
+  return formatDecimalWithoutScientific(quantity);
+}
+
+function formatTradeTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   });
+}
+
+function formatDecimalWithoutScientific(value: number): string {
+  return value.toLocaleString('en-US', {
+    useGrouping: false,
+    maximumFractionDigits: 20,
+  });
+}
+
+function trimFixed(value: number, digits: number): string {
+  return value.toFixed(digits).replace(/\.?0+$/, '');
+}
+
+function formatVolume(volume: number): string {
+  if (volume >= 1000000000) return `${(volume / 1000000000).toFixed(2)}亿`;
+  if (volume >= 100000000) return `${(volume / 100000000).toFixed(2)}亿`;
+  if (volume >= 10000) return `${(volume / 10000).toFixed(2)}万`;
+  if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
+  return volume.toFixed(2);
 }

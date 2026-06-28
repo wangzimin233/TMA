@@ -1,6 +1,6 @@
-import type { MarketPair } from '../data/mock';
+import type { MarketPairView } from '../types/app';
 
-export function MarketLine({ pair }: { pair: MarketPair }) {
+export function MarketLine({ pair }: { pair: MarketPairView }) {
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(94px,1fr)_76px] items-center border-b border-line px-1 py-2.5">
       <div className="min-w-0 text-[0.98rem] font-semibold">

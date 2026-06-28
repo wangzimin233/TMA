@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { fetchTradeUser } from './api/auth';
@@ -23,7 +23,9 @@ import { ProfileSettingsPage } from './pages/profile/ProfileSettingsPage';
 import { TradePage } from './pages/trade/TradePage';
 import { TransferPage } from './pages/transfer/TransferPage';
 import { WithdrawPage } from './pages/withdraw/WithdrawPage';
+import { getViewportScrollTop, scrollViewportTo } from './lib/scroll';
 import { useAuthStore } from './store/auth.store';
+import { useMarketUiStore } from './store/market-ui.store';
 import { useTradeStore } from './store/trade.store';
 
 const protectedPaths = new Set(['/profile', '/profile/records', '/profile/settings', '/deposit', '/withdraw', '/transfer']);
@@ -210,6 +212,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-app text-ink">
+      <RouteScrollManager />
       <main className="mx-auto min-h-screen w-full min-w-0 max-w-[430px] overflow-hidden bg-base pb-[calc(70px+env(safe-area-inset-bottom))] shadow-2xl shadow-black/35 max-[480px]:shadow-none">
         <PageTransition routeKey={routeKey} motionKind={routeMotionKind}>
           {routes}
@@ -236,6 +239,39 @@ function App() {
       />
     </div>
   );
+}
+
+function RouteScrollManager() {
+  const { pathname, search } = useLocation();
+
+  useEffect(() => {
+    const originalScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+
+    return () => {
+      window.history.scrollRestoration = originalScrollRestoration;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    return () => {
+      if (pathname === '/market') {
+        useMarketUiStore.getState().saveScrollPosition(getViewportScrollTop());
+      }
+    };
+  }, [pathname, search]);
+
+  useLayoutEffect(() => {
+    if (pathname === '/market') {
+      const { hasSavedScroll, scrollY } = useMarketUiStore.getState();
+      scrollViewportTo(hasSavedScroll ? scrollY : 0);
+      return;
+    }
+
+    scrollViewportTo(0);
+  }, [pathname, search]);
+
+  return null;
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
