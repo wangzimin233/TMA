@@ -1,4 +1,4 @@
-import { ChevronDown, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useMarketRows } from '../../hooks/useMockQueries';
 import { useTradeStore } from '../../store/trade.store';
 
@@ -24,13 +24,12 @@ export function MarketPage({ openTrade }: { openTrade: () => void }) {
           <Search className="size-6 shrink-0 text-muted-foreground" />
         </div>
         <div className="no-scrollbar -mx-4 mt-3.5 flex items-center gap-4 overflow-x-auto whitespace-nowrap px-4 text-[0.82rem] text-muted-foreground">
-          {['全部', '热门', '涨幅榜', '跌幅榜', 'USDT'].map((item, index) => (
+          {['全部', '热门', '涨幅榜', '跌幅榜'].map((item, index) => (
             <button
               key={item}
               className={`inline-flex h-8 shrink-0 items-center justify-center ${index === 0 ? 'rounded bg-soft px-2.5 text-ink' : ''}`}
             >
               {item}
-              {item === 'USDT' && <ChevronDown className="ml-0.5 size-3" />}
             </button>
           ))}
         </div>

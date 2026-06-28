@@ -15,7 +15,7 @@ import { useAccountOverview } from '../../hooks/useAccountQueries';
 import { useHomeMarkets } from '../../hooks/useMockQueries';
 import { useTradeStore } from '../../store/trade.store';
 
-const homeMarketTabs = ['自选', '热门', '涨幅榜', '跌幅榜', '新币'] as const;
+const homeMarketTabs = ['自选', '热门', '涨幅榜', '跌幅榜'] as const;
 const marketTypeFilters = ['全部', '现货', '合约'] as const;
 const spotMarketBases = ['BTC', 'ETH', 'BGB', 'XRP', 'SOL', 'BNB', 'DOGE', 'ADA'];
 const futuresMarketBases = ['BTC', 'ETH', 'SOL', 'DOGE', 'SUI', 'NEAR', 'OP', 'AVAX', 'LINK', 'ARB'];
@@ -202,8 +202,6 @@ function MarketPreview({ openPair }: { openPair: (symbol: string) => void }) {
         return [...pairs].sort((a, b) => b.change - a.change).slice(0, 5);
       case '跌幅榜':
         return [...pairs].sort((a, b) => a.change - b.change).slice(0, 5);
-      case '新币':
-        return [...pairs].reverse().slice(0, 5);
       case '自选':
       default:
         return pairs.slice(0, 5);

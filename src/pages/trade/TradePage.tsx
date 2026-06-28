@@ -150,10 +150,22 @@ function ChartTradePage({
         </div>
       </div>
       <div className="border-b border-line">
-        <div className="no-scrollbar flex gap-8 overflow-x-auto whitespace-nowrap px-4 py-2 text-[0.9rem]">
-          <button className="shrink-0 border-b-2 border-brand pb-1.5 text-brand">图表</button>
-          <button className="shrink-0 text-muted-foreground">币种概况</button>
-        </div>
+        <Tabs value="chart" className="min-w-0 gap-0">
+          <TabsList variant="line" className="no-scrollbar flex !h-10 w-full min-w-0 justify-start gap-8 overflow-x-auto whitespace-nowrap rounded-none px-4 py-0 text-[0.9rem] font-semibold leading-none">
+            <TabsTrigger
+              value="chart"
+              className="!h-10 flex-none shrink-0 rounded-none border-0 bg-transparent px-0 pb-1.5 pt-0 text-muted-foreground shadow-none after:!bottom-0 after:bg-warning data-[state=active]:bg-transparent data-[state=active]:text-brand dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-brand"
+            >
+              图表
+            </TabsTrigger>
+            <TabsTrigger
+              value="overview"
+              className="!h-10 flex-none shrink-0 rounded-none border-0 bg-transparent px-0 pb-1.5 pt-0 text-muted-foreground shadow-none after:!bottom-0 after:bg-warning data-[state=active]:bg-transparent data-[state=active]:text-brand dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-brand"
+            >
+              币种概况
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="no-scrollbar flex items-center gap-2 overflow-x-auto whitespace-nowrap bg-base2 px-4 py-2 text-[0.75rem] text-muted-foreground">
           {intervals.map((item) => (
             <button key={item} className={currentInterval === item ? 'shrink-0 rounded bg-soft2 px-2.5 py-1.5 text-ink' : 'shrink-0 px-2 py-1.5'} onClick={() => setCurrentInterval(item)}>
@@ -199,6 +211,7 @@ function CandleChart() {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: '#8b96a8',
         fontSize: 11,
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(43, 49, 57, 0.68)' },
@@ -511,12 +524,24 @@ function OrderBook({ base = 'BTC', ticker, contract = false }: { base?: string; 
 
   return (
     <div className="min-w-0">
-      <div className="mb-2 flex items-center justify-between">
-        <div className="no-scrollbar flex min-w-0 gap-3 overflow-x-auto whitespace-nowrap text-[0.84rem]">
-        <button className="shrink-0 border-b-2 border-brand pb-1 text-ink">盘口</button>
-          <button className="shrink-0 text-muted-foreground">最新成交</button>
-        </div>
-        <button className="rounded border border-line px-1.5 py-0.5 text-[0.68rem] text-muted-foreground">0.1</button>
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
+        <Tabs value="book" className="min-w-0 flex-1 gap-0">
+          <TabsList variant="line" className="no-scrollbar flex !h-6 min-w-0 justify-start gap-3 overflow-x-auto whitespace-nowrap p-0 text-[0.84rem] font-semibold leading-none">
+            <TabsTrigger
+              value="book"
+              className="!h-6 flex-none shrink-0 rounded-none border-0 bg-transparent px-0 pb-1 pt-0 text-muted-foreground shadow-none after:!bottom-0 after:bg-warning data-[state=active]:bg-transparent data-[state=active]:text-ink dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-ink"
+            >
+              盘口
+            </TabsTrigger>
+            <TabsTrigger
+              value="trades"
+              className="!h-6 flex-none shrink-0 rounded-none border-0 bg-transparent px-0 pb-1 pt-0 text-muted-foreground shadow-none after:!bottom-0 after:bg-warning data-[state=active]:bg-transparent data-[state=active]:text-ink dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-ink"
+            >
+              最新成交
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <button className="h-6 shrink-0 rounded border border-line px-1.5 text-[0.68rem] leading-none text-muted-foreground">0.1</button>
       </div>
       <div className="grid grid-cols-2 gap-2 px-1 text-[0.68rem] text-muted-foreground">
         <span>价(USDT)</span>
