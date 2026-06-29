@@ -692,7 +692,6 @@ function OrderBook({ base = 'BTC', ticker }: { base?: string; ticker?: TradeTick
               <DepthViewButton mode="buy" activeMode={depthView} label="买盘" onSelect={setDepthView} />
               <DepthViewButton mode="sell" activeMode={depthView} label="卖盘" onSelect={setDepthView} />
             </div>
-            <button className="h-6 shrink-0 rounded border border-line px-1.5 text-[0.68rem] leading-none text-muted-foreground">0.1</button>
           </div>
         )}
       </div>
@@ -779,12 +778,13 @@ function DepthEmptyRows({ label }: { label: string }) {
 
 function DepthRow({ price, amount, quantity, maxAmount, side }: { price: string; amount: string; quantity: number; maxAmount: number; side: 'buy' | 'sell' }) {
   const width = maxAmount > 0 ? Math.max(12, Math.min(100, (quantity / maxAmount) * 100)) : 0;
+  const fillScale = width / 100;
   const depthColor = side === 'buy' ? 'bg-buy/8' : 'bg-sell/8';
   const textColor = side === 'buy' ? 'text-buy' : 'text-sell';
 
   return (
     <div className="relative grid h-5 grid-cols-2 items-center overflow-hidden px-1 text-[0.72rem] tabular-nums">
-      <span className={`absolute inset-y-0 right-0 ${depthColor}`} style={{ width: `${width}%` }} />
+      <span className={`depth-liquidity-bar absolute inset-y-0 right-0 w-full origin-right ${depthColor}`} style={{ transform: `scaleX(${fillScale})` }} />
       <span className={`relative ${textColor}`}>{price}</span>
       <span className="relative text-right text-ink">{amount}</span>
     </div>

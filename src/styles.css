@@ -120,6 +120,13 @@ button {
   transform: translateY(-1px) scale(1.06);
 }
 
+.depth-liquidity-bar {
+  transition:
+    transform var(--motion-duration-base) var(--motion-ease-emphasized),
+    opacity var(--motion-duration-base) var(--motion-ease-standard);
+  will-change: transform;
+}
+
 @keyframes page-tab-forward-in {
   from {
     opacity: 0;
