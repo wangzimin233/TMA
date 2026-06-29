@@ -27,7 +27,7 @@ type MarketUiState = {
 export const useMarketUiStore = create<MarketUiState>((set) => ({
   mainTab: '现货',
   subTab: '全部',
-  homeMarketTab: '自选',
+  homeMarketTab: '热门',
   homeMarketType: '全部',
   searchQuery: '',
   showSearch: false,

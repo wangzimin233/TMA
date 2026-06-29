@@ -127,6 +127,16 @@ button {
   will-change: transform;
 }
 
+.order-flow-segment {
+  height: 100%;
+  transition: width var(--motion-duration-page) var(--motion-ease-emphasized);
+  will-change: width;
+}
+
+.price-fill-pulse {
+  animation: price-fill-pulse 520ms var(--motion-ease-standard);
+}
+
 @keyframes page-tab-forward-in {
   from {
     opacity: 0;
@@ -166,6 +176,19 @@ button {
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes price-fill-pulse {
+  0% {
+    border-color: color-mix(in srgb, var(--primary) 88%, transparent);
+    background-color: color-mix(in srgb, var(--primary) 12%, var(--color-base2));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 24%, transparent);
+  }
+  100% {
+    border-color: var(--border);
+    background-color: var(--color-base2);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 

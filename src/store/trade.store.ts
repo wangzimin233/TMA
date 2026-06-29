@@ -15,11 +15,11 @@ type TradeState = {
 };
 
 export const useTradeStore = create<TradeState>((set) => ({
-  currentSymbol: 'BTC/USDT',
+  currentSymbol: '',
   currentInterval: '15m',
   selectedLeverage: 10,
   tradeMode: 'spot',
-  showChart: false,
+  showChart: true,
   setCurrentSymbol: (currentSymbol) => set({ currentSymbol }),
   setCurrentInterval: (currentInterval) => set({ currentInterval }),
   setSelectedLeverage: (selectedLeverage) => set({ selectedLeverage }),

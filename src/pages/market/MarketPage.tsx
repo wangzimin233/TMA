@@ -3,11 +3,12 @@ import { Search, X } from 'lucide-react';
 import { useSpotMarketList, useSpotFavorites } from '../../hooks/useSpotQueries';
 import { useTradeStore } from '../../store/trade.store';
 import { useMarketUiStore } from '../../store/market-ui.store';
+import { useAuthStore } from '../../store/auth.store';
 import { symbolFormat } from '../../lib/utils';
 import { scrollViewportTo } from '../../lib/scroll';
 import type { SpotMarketListParams } from '../../types/app';
 
-export function MarketPage({ openTrade }: { openTrade: () => void }) {
+export function MarketPage({ openTrade }: { openTrade: (symbol?: string) => void }) {
   const mainTab = useMarketUiStore((state) => state.mainTab);
   const subTab = useMarketUiStore((state) => state.subTab);
   const searchQuery = useMarketUiStore((state) => state.searchQuery);
@@ -21,6 +22,7 @@ export function MarketPage({ openTrade }: { openTrade: () => void }) {
   const resetScrollPosition = useMarketUiStore((state) => state.resetScrollPosition);
   const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
   const setShowChart = useTradeStore((state) => state.setShowChart);
+  const isLogin = useAuthStore((state) => state.isLogin);
   const didRestoreAfterLoadRef = useRef(false);
   const isPlaceholderTab = mainTab === '合约' || mainTab === '榜单';
   const isSpotTab = mainTab === '现货';
@@ -36,10 +38,11 @@ export function MarketPage({ openTrade }: { openTrade: () => void }) {
 
   // 根据tab选择数据源
   const { data: marketList = [], isLoading: marketLoading } = useSpotMarketList(params, isSpotTab);
-  const { data: favoriteList = [], isLoading: favoritesLoading } = useSpotFavorites(isFavoriteTab);
+  const { data: favoriteList = [], isLoading: favoritesLoading } = useSpotFavorites(isFavoriteTab && isLogin);
+  const favoriteRows = isLogin ? favoriteList : [];
 
-  const rows = isPlaceholderTab ? [] : isFavoriteTab ? favoriteList : marketList;
-  const isLoading = isPlaceholderTab ? false : isFavoriteTab ? favoritesLoading : marketLoading;
+  const rows = isPlaceholderTab ? [] : isFavoriteTab ? favoriteRows : marketList;
+  const isLoading = isPlaceholderTab ? false : isFavoriteTab && isLogin ? favoritesLoading : marketLoading;
 
   // 确保是数组类型
   const rowsArray = Array.isArray(rows) ? rows : [];
@@ -61,8 +64,8 @@ export function MarketPage({ openTrade }: { openTrade: () => void }) {
   const handleRowClick = (symbolCode: string) => {
     const normalizedSymbol = symbolFormat.normalize(symbolCode);
     setCurrentSymbol(normalizedSymbol);
-    setShowChart(false);
-    openTrade();
+    setShowChart(true);
+    openTrade(normalizedSymbol);
   };
 
   return (
@@ -148,7 +151,7 @@ export function MarketPage({ openTrade }: { openTrade: () => void }) {
           <div className="py-20 text-center text-[0.9rem] text-muted-foreground">加载中...</div>
         ) : rowsArray.length === 0 ? (
           <div className="py-20 text-center text-[0.9rem] text-muted-foreground">
-            {mainTab === '自选' ? '暂无自选，快去收藏交易对吧' : '暂无数据'}
+            {mainTab === '自选' && !isLogin ? '请登录后查看' : mainTab === '自选' ? '暂无自选，快去收藏交易对吧' : '暂无数据'}
           </div>
         ) : (
           rowsArray.map((row) => (

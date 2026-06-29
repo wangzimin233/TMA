@@ -161,13 +161,13 @@ export function useSpotFavorites(enabled = true) {
 /**
  * 查询收藏状态
  */
-export function useSpotFavoriteStatus(symbol: string) {
+export function useSpotFavoriteStatus(symbol: string, enabled = true) {
   const symbolCode = symbolFormat.toApi(symbol);
 
   return useQuery({
     queryKey: ['spot', 'favoriteStatus', symbolCode],
     queryFn: () => spotApi.getFavoriteStatus(symbolCode),
-    enabled: !!symbol,
+    enabled: enabled && !!symbol,
     retry: false, // 未登录会返回401，不重试
   });
 }

@@ -24,6 +24,7 @@ import { TradePage } from './pages/trade/TradePage';
 import { TransferPage } from './pages/transfer/TransferPage';
 import { WithdrawPage } from './pages/withdraw/WithdrawPage';
 import { getViewportScrollTop, scrollViewportTo } from './lib/scroll';
+import { symbolFormat } from './lib/utils';
 import { useAuthStore } from './store/auth.store';
 import { useMarketUiStore } from './store/market-ui.store';
 import { useTradeStore } from './store/trade.store';
@@ -117,7 +118,14 @@ function App() {
   const openDeposit = () => navigate('/deposit');
   const openWithdraw = () => navigate('/withdraw');
   const openTransfer = () => navigate('/transfer');
-  const openTrade = () => navigate('/trade');
+  const openTrade = (symbol?: string) => {
+    if (!symbol) {
+      navigate('/trade');
+      return;
+    }
+
+    navigate(`/trade?symbol=${encodeURIComponent(symbolFormat.toApi(symbolFormat.normalize(symbol)))}`);
+  };
   const openProfile = () => navigate('/profile');
   const openRecords = () => navigate('/profile/records');
   const openSettings = () => navigate('/profile/settings');

@@ -32,7 +32,7 @@ export function HomePage({
   openAuth: () => void;
   openDeposit: () => void;
   openWithdraw: () => void;
-  openTrade: () => void;
+  openTrade: (symbol?: string) => void;
   openProfile: () => void;
 }) {
   // 查询热门币种前3个
@@ -49,13 +49,13 @@ export function HomePage({
   const openPair = (symbolCode: string) => {
     const normalizedSymbol = symbolFormat.normalize(symbolCode);
     setCurrentSymbol(normalizedSymbol);
-    setShowChart(false);
-    openTrade();
+    setShowChart(true);
+    openTrade(normalizedSymbol);
   };
 
   const openTradeMode = (mode: 'spot' | 'contract') => {
     setTradeMode(mode);
-    setShowChart(false);
+    setShowChart(true);
     openTrade();
   };
 
@@ -126,7 +126,7 @@ export function HomePage({
           <div className="mt-3 grid grid-cols-3 gap-2">
             <button className="rounded bg-brand py-2 text-[0.82rem] font-semibold text-primary-foreground" onClick={openDeposit}>充值</button>
             <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold" onClick={openWithdraw}>提现</button>
-            <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold" onClick={openTrade}>交易</button>
+            <button className="rounded border border-line bg-base2 py-2 text-[0.82rem] font-semibold" onClick={() => openTrade()}>交易</button>
           </div>
         </div>
 
@@ -149,7 +149,7 @@ export function HomePage({
           ))}
         </div>
 
-        <MarketPreview openPair={openPair} />
+        <MarketPreview openPair={openPair} isLogin={isLogin} />
       </div>
     </section>
   );
@@ -211,7 +211,7 @@ function CoinCard({ pair }: { pair: MarketPairView }) {
   );
 }
 
-function MarketPreview({ openPair }: { openPair: (symbolCode: string) => void }) {
+function MarketPreview({ openPair, isLogin }: { openPair: (symbolCode: string) => void; isLogin: boolean }) {
   const activeTab = useMarketUiStore((state) => state.homeMarketTab);
   const marketType = useMarketUiStore((state) => state.homeMarketType);
   const setActiveTab = useMarketUiStore((state) => state.setHomeMarketTab);
@@ -228,10 +228,11 @@ function MarketPreview({ openPair }: { openPair: (symbolCode: string) => void })
   const { data: marketList = [] } = useSpotMarketList(
     activeTab !== '自选' ? { tab: tabMap[activeTab], limit: 5 } : undefined
   );
-  const { data: favoriteList = [] } = useSpotFavorites();
+  const { data: favoriteList = [] } = useSpotFavorites(activeTab === '自选' && isLogin);
+  const favoriteRows = isLogin ? favoriteList : [];
 
   const displayedPairs = useMemo(() => {
-    const sourceList = activeTab === '自选' ? favoriteList : marketList;
+    const sourceList = activeTab === '自选' ? favoriteRows : marketList;
     const sourceArray = Array.isArray(sourceList) ? sourceList : [];
 
     if (marketType === '合约') {
@@ -239,7 +240,7 @@ function MarketPreview({ openPair }: { openPair: (symbolCode: string) => void })
     }
 
     return sourceArray.slice(0, 5);
-  }, [activeTab, marketType, marketList, favoriteList]);
+  }, [activeTab, marketType, marketList, favoriteRows]);
 
   return (
     <div>
@@ -300,7 +301,7 @@ function MarketPreview({ openPair }: { openPair: (symbolCode: string) => void })
       <div>
         {displayedPairs.length === 0 ? (
           <div className="py-10 text-center text-[0.9rem] text-muted-foreground">
-            {activeTab === '自选' && marketType !== '合约' ? '暂无自选' : '暂无数据'}
+            {activeTab === '自选' && !isLogin ? '请登录后查看' : activeTab === '自选' && marketType !== '合约' ? '暂无自选' : '暂无数据'}
           </div>
         ) : (
           displayedPairs.map((item) => (
