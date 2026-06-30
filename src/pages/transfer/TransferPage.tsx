@@ -1,5 +1,6 @@
 import { ArrowLeft, ChevronDown, Repeat2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import type { AccountAsset, AccountType } from '../../api/account';
 import { getErrorMessage } from '../../api/client';
@@ -21,8 +22,10 @@ const ACCOUNT_OPTIONS: Array<{ type: AccountType; label: string }> = [
 ];
 
 export function TransferPage({ onBack }: { onBack: () => void }) {
-  const [fromAccountType, setFromAccountType] = useState<AccountType>('SPOT');
-  const [toAccountType, setToAccountType] = useState<AccountType>('FUND');
+  const [searchParams] = useSearchParams();
+  const initialFromAccountType = getInitialFromAccountType(searchParams.get('from'));
+  const [fromAccountType, setFromAccountType] = useState<AccountType>(initialFromAccountType);
+  const [toAccountType, setToAccountType] = useState<AccountType>(() => getDefaultToAccountType(initialFromAccountType));
   const [selectedCoinCode, setSelectedCoinCode] = useState('');
   const [amount, setAmount] = useState('');
   const [accountPicker, setAccountPicker] = useState<'from' | 'to' | null>(null);
@@ -284,6 +287,15 @@ function CoinListSkeleton() {
 
 function getAccountLabel(type: AccountType) {
   return ACCOUNT_OPTIONS.find((account) => account.type === type)?.label ?? type;
+}
+
+function getInitialFromAccountType(value: string | null): AccountType {
+  if (value === 'FUND' || value === 'SPOT' || value === 'FUTURES') return value;
+  return 'SPOT';
+}
+
+function getDefaultToAccountType(fromAccountType: AccountType): AccountType {
+  return fromAccountType === 'FUND' ? 'SPOT' : 'FUND';
 }
 
 function formatNumber(value: number) {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   Copy,
   FileText,
@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { useAccountAssets, useAccountOverview, useAccountSummary } from '../../hooks/useAccountQueries';
 import { useAuthStore } from '../../store/auth.store';
+import { useProfileUiStore, type ProfileAssetTab } from '../../store/profile-ui.store';
 
 export function ProfilePage({
   openRecords,
@@ -23,7 +24,7 @@ export function ProfilePage({
   openSettings: () => void;
   openDeposit: () => void;
   openWithdraw: () => void;
-  openTransfer: () => void;
+  openTransfer: (fromAccountType?: AccountType) => void;
 }) {
   const userInfo = useAuthStore((state) => state.userInfo);
   const displayName = userInfo?.nickname || userInfo?.email || '交易用户';
@@ -102,9 +103,7 @@ export function ProfilePage({
   );
 }
 
-type AssetTab = 'overview' | 'fund' | 'spot' | 'futures';
-
-const ASSET_TABS: Array<{ value: AssetTab; label: string; accountType?: AccountType }> = [
+const ASSET_TABS: Array<{ value: ProfileAssetTab; label: string; accountType?: AccountType }> = [
   { value: 'overview', label: '总览' },
   { value: 'fund', label: '资金', accountType: 'FUND' },
   { value: 'spot', label: '现货', accountType: 'SPOT' },
@@ -118,9 +117,10 @@ function AccountAssetModule({
 }: {
   openDeposit: () => void;
   openWithdraw: () => void;
-  openTransfer: () => void;
+  openTransfer: (fromAccountType?: AccountType) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<AssetTab>('overview');
+  const activeTab = useProfileUiStore((state) => state.profileAssetTab);
+  const setActiveTab = useProfileUiStore((state) => state.setProfileAssetTab);
   const { data: overview, isLoading: overviewLoading } = useAccountOverview();
   const { data: allAssets = [], isLoading: assetsLoading, isError, refetch } = useAccountAssets();
   const { data: summaries = [] } = useAccountSummary();
@@ -137,7 +137,7 @@ function AccountAssetModule({
   const isLoading = assetsLoading || (activeTab === 'overview' && overviewLoading);
 
   return (
-    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AssetTab)} className="gap-0">
+    <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ProfileAssetTab)} className="gap-0">
       <div className="no-scrollbar -mx-1 overflow-x-auto pb-1">
         <TabsList variant="line" className="h-9 min-w-max gap-4 px-1">
           {ASSET_TABS.map((tab) => (
@@ -197,7 +197,7 @@ function AccountAssetModule({
           )}
           <Button
             className={`${showFundActions ? '' : 'w-full'} h-10 rounded-md bg-soft text-[0.86rem] font-semibold text-ink hover:bg-soft2`}
-            onClick={openTransfer}
+            onClick={() => openTransfer(currentTab.accountType)}
           >
             <Repeat2 className="size-4" />
             划转

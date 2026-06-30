@@ -13,6 +13,97 @@ import type {
   SpotKlineParams,
 } from '../types/app';
 import type { ApiResult } from './client';
+import type { SpotOrderPayload } from '../lib/spot-order';
+
+export type SpotTradeRuleConfig = {
+  tradeType: 'SPOT' | 'FUTURES' | string;
+  ruleStatus: number;
+  platformCode: string;
+  platformSymbolCode: string;
+  contractType?: string | null;
+  marginCoinCode?: string | null;
+  settleCoinCode?: string | null;
+  pricePrecision: number;
+  qtyPrecision: number;
+  amountPrecision: number;
+  minPrice: number;
+  maxPrice: number;
+  tickSize: number;
+  minQty: number;
+  maxQty: number;
+  stepSize: number;
+  minNotional: number;
+  makerFeeRate: number;
+  takerFeeRate: number;
+  defaultLeverage?: number | null;
+  minLeverage?: number | null;
+  maxLeverage?: number | null;
+  fundingIntervalHours?: number | null;
+};
+
+export type SpotTradeConfig = {
+  symbolId: number;
+  symbolCode: string;
+  symbolName: string;
+  baseCoinCode: string;
+  quoteCoinCode: string;
+  spotEnabled: number;
+  futuresEnabled: number;
+  tradeStatus: number;
+  priceIndexEnabled: number;
+  spotTradable: boolean;
+  futuresTradable: boolean;
+  spotRule?: SpotTradeRuleConfig | null;
+  futuresRule?: SpotTradeRuleConfig | null;
+};
+
+export type SpotOrderStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | number;
+
+export type SpotOrder = {
+  orderNo: string;
+  symbolCode: string;
+  symbolName?: string | null;
+  side: 'BUY' | 'SELL' | string;
+  orderType: 'LIMIT' | 'MARKET' | string;
+  timeInForce?: string | null;
+  price?: number | null;
+  quantity?: number | null;
+  quoteAmount?: number | null;
+  executedQuantity?: number | null;
+  executedQuoteAmount?: number | null;
+  avgPrice?: number | null;
+  feeCoinCode?: string | null;
+  feeAmount?: number | null;
+  frozenCoinCode?: string | null;
+  frozenAmount?: number | null;
+  orderStatus: SpotOrderStatus;
+  cancelReason?: string | null;
+  availableBalance?: number | null;
+  frozenBalance?: number | null;
+  submitTime?: string | null;
+  finishTime?: string | null;
+  lastFillTime?: string | null;
+  createTime?: string | null;
+};
+
+export type SpotOrderHistoryParams = {
+  page?: number;
+  pageSize?: number;
+  symbolCode?: string;
+  orderStatus?: SpotOrderStatus;
+};
+
+export type PageResult<T> = {
+  list: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type SpotCancelOrderPayload = {
+  orderNo: string;
+  remark?: string;
+};
 
 /**
  * 现货行情和自选相关 API
@@ -97,6 +188,52 @@ export const spotApi = {
         minNotional: number;
       }>>('/api/trade/spot/exchange-info', { params: { symbol } }),
     );
+  },
+
+  /**
+   * 查询交易对开关与手续费规则
+   */
+  getTradeConfig: (symbol: string) => {
+    return requestData(apiClient.get<ApiResult<SpotTradeConfig>>('/api/trade/spot/trade-config', { params: { symbol } }));
+  },
+
+  /**
+   * 提交现货订单
+   */
+  placeSpotOrder: (payload: SpotOrderPayload) => {
+    return requestData(apiClient.post<ApiResult<SpotOrder>>('/api/trade/spot/order/place', payload));
+  },
+
+  /**
+   * 撤销现货订单
+   */
+  cancelSpotOrder: (payload: SpotCancelOrderPayload) => {
+    return requestData(apiClient.post<ApiResult<SpotOrder>>('/api/trade/spot/order/cancel', payload));
+  },
+
+  /**
+   * 查询当前委托
+   */
+  getOpenOrders: (symbolCode?: string) => {
+    return requestData(apiClient.get<ApiResult<SpotOrder[]>>('/api/trade/spot/order/open-orders', {
+      params: symbolCode ? { symbolCode } : undefined,
+    }));
+  },
+
+  /**
+   * 查询历史委托
+   */
+  getOrderHistory: (params?: SpotOrderHistoryParams) => {
+    return requestData(apiClient.get<ApiResult<PageResult<SpotOrder>>>('/api/trade/spot/order/history', {
+      params: { page: 1, pageSize: 10, ...params },
+    }));
+  },
+
+  /**
+   * 查询单笔订单详情
+   */
+  getOrderDetail: (orderNo: string) => {
+    return requestData(apiClient.get<ApiResult<SpotOrder>>('/api/trade/spot/order/detail', { params: { orderNo } }));
   },
 
   // ============ 现货自选接口 ============

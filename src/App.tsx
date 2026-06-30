@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import type { AccountType } from './api/account';
 import { fetchTradeUser } from './api/auth';
 import { getErrorMessage } from './api/client';
 import type { DepositCoin, DepositNetwork } from './api/deposit';
@@ -27,6 +28,7 @@ import { getViewportScrollTop, scrollViewportTo } from './lib/scroll';
 import { symbolFormat } from './lib/utils';
 import { useAuthStore } from './store/auth.store';
 import { useMarketUiStore } from './store/market-ui.store';
+import { useProfileUiStore } from './store/profile-ui.store';
 import { useTradeStore } from './store/trade.store';
 
 const protectedPaths = new Set(['/profile', '/profile/records', '/profile/settings', '/deposit', '/withdraw', '/transfer']);
@@ -45,7 +47,9 @@ function App() {
   const setUserInfo = useAuthStore((state) => state.setUserInfo);
   const setHydrating = useAuthStore((state) => state.setHydrating);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const resetProfileAssetTab = useProfileUiStore((state) => state.resetProfileAssetTab);
   const tradeMode = useTradeStore((state) => state.tradeMode);
+  const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
   const setTradeMode = useTradeStore((state) => state.setTradeMode);
   const showChart = useTradeStore((state) => state.showChart);
   const setShowChart = useTradeStore((state) => state.setShowChart);
@@ -98,6 +102,10 @@ function App() {
     setShowAuth(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    if (!isLogin) resetProfileAssetTab();
+  }, [isLogin, resetProfileAssetTab]);
+
   const openAuth = () => setShowAuth(true);
   const closeAuth = () => setShowAuth(false);
   const handleAuthSuccess = () => setShowAuth(false);
@@ -117,14 +125,29 @@ function App() {
 
   const openDeposit = () => navigate('/deposit');
   const openWithdraw = () => navigate('/withdraw');
-  const openTransfer = () => navigate('/transfer');
+  const openTransfer = (fromAccountType?: AccountType) => {
+    if (!fromAccountType) {
+      navigate('/transfer');
+      return;
+    }
+
+    navigate(`/transfer?from=${encodeURIComponent(fromAccountType)}`);
+  };
   const openTrade = (symbol?: string) => {
-    if (!symbol) {
+    if (symbol) {
+      const normalizedSymbol = symbolFormat.normalize(symbol);
+      setCurrentSymbol(normalizedSymbol);
+      navigate(`/trade?symbol=${encodeURIComponent(symbolFormat.toApi(normalizedSymbol))}`);
+      return;
+    }
+
+    const rememberedSymbol = symbolFormat.normalize(useTradeStore.getState().currentSymbol);
+    if (!rememberedSymbol) {
       navigate('/trade');
       return;
     }
 
-    navigate(`/trade?symbol=${encodeURIComponent(symbolFormat.toApi(symbolFormat.normalize(symbol)))}`);
+    navigate(`/trade?symbol=${encodeURIComponent(symbolFormat.toApi(rememberedSymbol))}`);
   };
   const openProfile = () => navigate('/profile');
   const openRecords = () => navigate('/profile/records');

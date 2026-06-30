@@ -3,12 +3,18 @@ type ParsedDecimal = {
   scale: number;
 };
 
-export function normalizeDecimalInput(value: string): string {
+export function normalizeDecimalInput(value: string, maxFractionDigits?: number): string {
   let normalized = '';
   let hasDot = false;
+  let fractionDigits = 0;
+  const hasFractionLimit = typeof maxFractionDigits === 'number' && maxFractionDigits >= 0;
 
   for (const char of value) {
     if (char >= '0' && char <= '9') {
+      if (hasDot && hasFractionLimit) {
+        if (fractionDigits >= maxFractionDigits) continue;
+        fractionDigits += 1;
+      }
       normalized += char;
       continue;
     }
@@ -21,6 +27,17 @@ export function normalizeDecimalInput(value: string): string {
 
   if (normalized.startsWith('.')) return `0${normalized}`;
   return normalized;
+}
+
+export function formatDecimalToPrecision(value: string, maxFractionDigits: number): string {
+  const normalized = normalizeDecimalInput(value);
+  if (!normalized || normalized === '0.') return normalized === '0.' ? '0' : '';
+  if (!normalized.includes('.')) return normalized;
+
+  const [integerPart, fractionPart = ''] = normalized.split('.');
+  const trimmedFraction = fractionPart.slice(0, Math.max(0, maxFractionDigits)).replace(/0+$/, '');
+
+  return trimmedFraction ? `${integerPart}.${trimmedFraction}` : integerPart;
 }
 
 export function multiplyDecimalStrings(left: string, right: string): string {
@@ -59,6 +76,21 @@ export function floorDecimalAtZero(value: string): string {
   if (!parsed || parsed.units <= 0n) return '0';
 
   return formatScaledInteger(parsed.units, parsed.scale);
+}
+
+export function floorDecimalToStep(value: string, step: string): string {
+  const valueParsed = parseDecimal(value);
+  const stepParsed = parseDecimal(step);
+  if (!valueParsed) return '';
+  if (!stepParsed || stepParsed.units <= 0n) return floorDecimalAtZero(value);
+  if (valueParsed.units <= 0n) return '0';
+
+  const scale = Math.max(valueParsed.scale, stepParsed.scale);
+  const valueUnits = scaleDecimalUnits(valueParsed, scale);
+  const stepUnits = scaleDecimalUnits(stepParsed, scale);
+  const flooredUnits = (valueUnits / stepUnits) * stepUnits;
+
+  return formatScaledInteger(flooredUnits, scale);
 }
 
 export function divideDecimalStrings(dividend: string, divisor: string, precision = 8): string {

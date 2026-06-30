@@ -1,10 +1,20 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import { spotApi } from '../api/spot';
+import type { SpotCancelOrderPayload, SpotOrderHistoryParams } from '../api/spot';
 import type { SpotKline, SpotMarketListParams, SpotKlineParams } from '../types/app';
 import { symbolFormat } from '../lib/utils';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+import { accountQueryKeys } from './useAccountQueries';
+import type { SpotOrderPayload } from '../lib/spot-order';
+
+export const spotOrderQueryKeys = {
+  root: ['spot', 'orders'] as const,
+  open: (symbolCode?: string) => ['spot', 'orders', 'open', symbolCode ?? 'ALL'] as const,
+  history: (params?: SpotOrderHistoryParams) => ['spot', 'orders', 'history', params ?? {}] as const,
+  detail: (orderNo?: string) => ['spot', 'orders', 'detail', orderNo ?? ''] as const,
+};
 
 /**
  * 查询现货交易对列表
@@ -141,6 +151,99 @@ export function useSpotExchangeInfo(symbol: string) {
     queryFn: () => spotApi.getExchangeInfo(symbolCode),
     staleTime: 30 * 60 * 1000, // 30分钟内不重新请求
     enabled: !!symbol,
+  });
+}
+
+/**
+ * 查询交易对开关与手续费规则
+ */
+export function useSpotTradeConfig(symbol: string) {
+  const symbolCode = symbolFormat.toApi(symbol);
+
+  return useQuery({
+    queryKey: ['spot', 'tradeConfig', symbolCode],
+    queryFn: () => spotApi.getTradeConfig(symbolCode),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!symbol,
+  });
+}
+
+/**
+ * 查询当前委托
+ */
+export function useSpotOpenOrders(symbol: string, enabled = true) {
+  const symbolCode = symbolFormat.toApi(symbol);
+
+  return useQuery({
+    queryKey: spotOrderQueryKeys.open(symbolCode),
+    queryFn: () => spotApi.getOpenOrders(symbolCode),
+    enabled: enabled && !!symbol,
+    staleTime: 10_000,
+  });
+}
+
+/**
+ * 查询历史委托
+ */
+export function useSpotOrderHistory(symbol: string, enabled = true) {
+  const symbolCode = symbolFormat.toApi(symbol);
+  const params: SpotOrderHistoryParams = { page: 1, pageSize: 10, symbolCode };
+
+  return useQuery({
+    queryKey: spotOrderQueryKeys.history(params),
+    queryFn: () => spotApi.getOrderHistory(params),
+    enabled: enabled && !!symbol,
+    staleTime: 10_000,
+  });
+}
+
+/**
+ * 查询单笔订单详情
+ */
+export function useSpotOrderDetail(orderNo: string | null, enabled = true) {
+  return useQuery({
+    queryKey: spotOrderQueryKeys.detail(orderNo ?? undefined),
+    queryFn: () => spotApi.getOrderDetail(orderNo ?? ''),
+    enabled: enabled && !!orderNo,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * 提交现货订单
+ */
+export function usePlaceSpotOrder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: SpotOrderPayload) => spotApi.placeSpotOrder(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: accountQueryKeys.root });
+      queryClient.invalidateQueries({ queryKey: spotOrderQueryKeys.root });
+      toast.success('下单成功');
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+}
+
+/**
+ * 撤销现货订单
+ */
+export function useCancelSpotOrder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: SpotCancelOrderPayload) => spotApi.cancelSpotOrder(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: accountQueryKeys.root });
+      queryClient.invalidateQueries({ queryKey: spotOrderQueryKeys.root });
+      toast.success('撤单成功');
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
   });
 }
 

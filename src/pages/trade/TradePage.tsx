@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bell, Calculator, CandlestickChart, ChevronDown, Columns2, FileText, Info, Minus, PanelBottom, PanelTop, Plus, Search, Star, WalletCards, X } from 'lucide-react';
+import { Bell, Calculator, CandlestickChart, ChevronDown, Columns2, FileText, Info, Loader2, Minus, PanelBottom, PanelTop, Plus, Search, Star, WalletCards, X } from 'lucide-react';
 import { CandlestickSeries, ColorType, createChart, type CandlestickData, type IChartApi, type ISeriesApi, type LogicalRange, type UTCTimestamp } from 'lightweight-charts';
 import { CoinDot } from '../../components/CoinDot';
 import { Drawer, DrawerClose, DrawerContent, DrawerTitle } from '../../components/ui/drawer';
@@ -11,9 +11,13 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { useTradeStore } from '../../store/trade.store';
 import { useAuthStore } from '../../store/auth.store';
 import type { SpotDepthLevel, SpotKlineParams, SpotSummary, SpotTrade, TradeMode } from '../../types/app';
-import { useSpotFavoriteStatus, useToggleSpotFavorite, useSpotSummary, useInfiniteSpotKlines, useSpotDepth, useSpotExchangeInfo, useSpotFavorites, useSpotMarketList, useSpotTrades } from '../../hooks/useSpotQueries';
-import { addDecimalStrings, divideDecimalStrings, floorDecimalAtZero, multiplyDecimalStrings, normalizeDecimalInput, subtractDecimalStrings } from '../../lib/decimal';
+import { useCancelSpotOrder, usePlaceSpotOrder, useSpotFavoriteStatus, useToggleSpotFavorite, useSpotSummary, useInfiniteSpotKlines, useSpotDepth, useSpotExchangeInfo, useSpotFavorites, useSpotMarketList, useSpotOpenOrders, useSpotOrderDetail, useSpotOrderHistory, useSpotTradeConfig, useSpotTrades } from '../../hooks/useSpotQueries';
+import { useAccountAssets } from '../../hooks/useAccountQueries';
+import { addDecimalStrings, divideDecimalStrings, floorDecimalAtZero, floorDecimalToStep, formatDecimalToPrecision, multiplyDecimalStrings, normalizeDecimalInput, subtractDecimalStrings } from '../../lib/decimal';
+import { buildSpotOrderPayload, getSpotOrderValidation, type SpotOrderBalance, type SpotOrderRule } from '../../lib/spot-order';
 import { symbolFormat } from '../../lib/utils';
+import type { AccountAsset } from '../../api/account';
+import type { SpotOrder, SpotTradeConfig } from '../../api/spot';
 
 const KLINE_INTERVALS: SpotKlineParams['interval'][] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 const KLINE_PAGE_LIMIT = 500;
@@ -49,7 +53,8 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
   const [showMarketPicker, setShowMarketPicker] = useState(false);
   const routeSymbolParam = searchParams.get('symbol')?.trim() ?? '';
   const routeSymbol = routeSymbolParam ? symbolFormat.normalize(routeSymbolParam.toUpperCase()) : '';
-  const shouldLoadDefaultSymbol = !routeSymbol;
+  const rememberedSymbol = currentSymbol ? symbolFormat.normalize(currentSymbol) : '';
+  const shouldLoadDefaultSymbol = !routeSymbol && !rememberedSymbol;
   const { data: defaultMarketList = [] } = useSpotMarketList({ tab: 'ALL', limit: 1 }, shouldLoadDefaultSymbol);
   const defaultMarketRows = Array.isArray(defaultMarketList) ? defaultMarketList : [];
 
@@ -66,7 +71,17 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
   }, [currentSymbol, routeSymbol, setCurrentSymbol]);
 
   useEffect(() => {
-    if (routeSymbol || defaultMarketRows.length === 0) return;
+    if (routeSymbol || !rememberedSymbol) return;
+
+    if (rememberedSymbol !== currentSymbol) {
+      setCurrentSymbol(rememberedSymbol);
+    }
+
+    setSearchParams({ symbol: symbolFormat.toApi(rememberedSymbol) }, { replace: true });
+  }, [currentSymbol, rememberedSymbol, routeSymbol, setCurrentSymbol, setSearchParams]);
+
+  useEffect(() => {
+    if (routeSymbol || rememberedSymbol || defaultMarketRows.length === 0) return;
 
     const defaultSymbol = symbolFormat.normalize(defaultMarketRows[0]?.symbolCode ?? '');
     if (!defaultSymbol) return;
@@ -76,7 +91,7 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
     }
 
     setSearchParams({ symbol: symbolFormat.toApi(defaultSymbol) }, { replace: true });
-  }, [currentSymbol, defaultMarketRows, routeSymbol, setCurrentSymbol, setSearchParams]);
+  }, [currentSymbol, defaultMarketRows, rememberedSymbol, routeSymbol, setCurrentSymbol, setSearchParams]);
 
   const selectSymbol = (symbol: string) => {
     setCurrentSymbol(symbol);
@@ -257,7 +272,7 @@ function SpotTradePage({
 
       <SpotTradingWorkspace symbol={symbol} base={base} quote={quote} ticker={ticker} />
       <div className="px-4 pb-3">
-        <CurrentOrders />
+        <CurrentOrders symbol={symbol} />
       </div>
     </section>
   );
@@ -712,7 +727,11 @@ function SpotOrderForm({
   const [quantity, setQuantity] = useState('');
   const [amount, setAmount] = useState('');
   const [lastEdited, setLastEdited] = useState<LimitLinkedField>('quantity');
+  const isAuthenticated = useAuthStore((state) => state.isLogin);
   const { data: exchangeInfo } = useSpotExchangeInfo(symbol);
+  const { data: tradeConfig } = useSpotTradeConfig(symbol);
+  const { data: accountAssets = [] } = useAccountAssets('SPOT', isAuthenticated);
+  const placeOrder = usePlaceSpotOrder();
   const marketPrice = toDecimalInput(ticker?.spotPrice ?? ticker?.price ?? '');
   const isLimitOrder = orderType === 'limit';
   const inputUnit = isLimitOrder ? base : side === 'buy' ? quote : base;
@@ -731,6 +750,47 @@ function SpotOrderForm({
   const feeUnit = side === 'buy' ? base : quote;
   const priceStep = toRuleDecimal(exchangeInfo?.tickSize);
   const quantityStep = toRuleDecimal(exchangeInfo?.stepSize);
+  const pricePrecision = getInputPrecision(tradeConfig?.spotRule?.pricePrecision, priceStep);
+  const quantityPrecision = getInputPrecision(tradeConfig?.spotRule?.qtyPrecision, quantityStep);
+  const amountPrecision = getInputPrecision(tradeConfig?.spotRule?.amountPrecision, undefined, exchangeInfo?.quoteAssetPrecision);
+  const estimatedFeePrecision = side === 'buy'
+    ? getInputPrecision(exchangeInfo?.baseAssetPrecision) ?? 8
+    : amountPrecision ?? 8;
+  const balanceByCoin = useMemo(() => getSpotBalanceMap(accountAssets), [accountAssets]);
+  const baseAvailable = balanceByCoin[base]?.availableBalance ?? '0';
+  const quoteAvailable = balanceByCoin[quote]?.availableBalance ?? '0';
+  const orderQuantity = isLimitOrder || side === 'sell' ? quantity : '';
+  const orderAmount = isLimitOrder ? amount : side === 'buy' ? quantity : '';
+  const orderRule = useMemo(
+    () => getSpotOrderRule(exchangeInfo, tradeConfig),
+    [exchangeInfo, tradeConfig],
+  );
+  const validation = getSpotOrderValidation({
+    rule: orderRule,
+    balances: balanceByCoin,
+    base,
+    quote,
+    side,
+    orderType,
+    price,
+    quantity: orderQuantity,
+    amount: orderAmount,
+    marketPrice,
+  });
+  const submitReason = !isAuthenticated ? '请先登录' : validation.reason;
+  const isSubmitting = placeOrder.isPending;
+  const submitDisabled = !isAuthenticated || !validation.canSubmit || isSubmitting;
+  const percentResetKey = `${symbol}:${side}:${orderType}`;
+  const estimatedFee = formatDecimalToPrecision(getEstimatedSpotFee({
+    side,
+    isLimitOrder,
+    price,
+    quantity: orderQuantity,
+    amount: orderAmount,
+    marketPrice,
+    feeRate: toRuleDecimal(tradeConfig?.spotRule?.takerFeeRate),
+    feeUnit,
+  }), estimatedFeePrecision);
 
   useEffect(() => {
     setPrice('');
@@ -753,7 +813,7 @@ function SpotOrderForm({
   }, [selectedPrice?.nonce, isLimitOrder]);
 
   const updatePrice = (nextValue: string) => {
-    const nextPrice = normalizeDecimalInput(nextValue);
+    const nextPrice = normalizeDecimalInput(nextValue, pricePrecision);
     applyLimitPrice(nextPrice);
   };
 
@@ -763,15 +823,27 @@ function SpotOrderForm({
     if (!isLimitOrder) return;
 
     if (lastEdited === 'amount') {
-      setQuantity(divideDecimalStrings(amount, nextPrice, 8));
+      syncQuantityFromAmount(amount, nextPrice);
       return;
     }
 
     setAmount(multiplyDecimalStrings(nextPrice, quantity));
   };
 
+  const normalizeQuantityToStep = (nextQuantity: string) => {
+    if (!quantityStep) return nextQuantity;
+    return floorDecimalToStep(nextQuantity, quantityStep);
+  };
+
+  const syncQuantityFromAmount = (nextAmount: string, nextPrice = price) => {
+    const rawQuantity = divideDecimalStrings(nextAmount, nextPrice, 18);
+    const steppedQuantity = normalizeQuantityToStep(rawQuantity);
+
+    setQuantity(steppedQuantity);
+  };
+
   const updateQuantity = (nextValue: string) => {
-    const nextQuantity = normalizeDecimalInput(nextValue);
+    const nextQuantity = normalizeDecimalInput(nextValue, quantityPrecision);
     setQuantity(nextQuantity);
     setLastEdited('quantity');
 
@@ -781,10 +853,10 @@ function SpotOrderForm({
   };
 
   const updateAmount = (nextValue: string) => {
-    const nextAmount = normalizeDecimalInput(nextValue);
+    const nextAmount = normalizeDecimalInput(nextValue, amountPrecision);
     setAmount(nextAmount);
     setLastEdited('amount');
-    setQuantity(divideDecimalStrings(nextAmount, price, 8));
+    syncQuantityFromAmount(nextAmount);
   };
 
   const stepPrice = (direction: 'down' | 'up') => {
@@ -806,6 +878,40 @@ function SpotOrderForm({
       : floorDecimalAtZero(subtractDecimalStrings(quantity, quantityStep));
 
     updateQuantity(nextQuantity);
+  };
+
+  const applyBalancePercent = (percent: number) => {
+    const available = side === 'buy' ? quoteAvailable : baseAvailable;
+    const nextValue = divideDecimalStrings(multiplyDecimalStrings(available, String(percent)), '100', 18);
+
+    if (side === 'buy') {
+      if (isLimitOrder) {
+        updateAmount(nextValue);
+      } else {
+        updateQuantity(nextValue);
+      }
+      return;
+    }
+
+    updateQuantity(normalizeQuantityToStep(nextValue));
+  };
+
+  const submitOrder = () => {
+    if (submitDisabled) return;
+
+    placeOrder.mutate(buildSpotOrderPayload({
+      symbolCode: symbolFormat.toApi(symbol),
+      side,
+      orderType,
+      price,
+      quantity: orderQuantity,
+      amount: orderAmount,
+    }), {
+      onSuccess: () => {
+        setQuantity('');
+        setAmount('');
+      },
+    });
   };
 
   return (
@@ -876,7 +982,7 @@ function SpotOrderForm({
             stepDisabled={!quantityStep}
             ariaLabel={`数量(${base})`}
           />
-          <PercentRail compact />
+          <PercentRail compact resetKey={percentResetKey} onPercentChange={applyBalancePercent} />
           <TradeInput value={amount} onValueChange={updateAmount} placeholder="成交金额" suffix={quote} dense ariaLabel={`成交金额(${quote})`} />
         </div>
       ) : (
@@ -885,18 +991,29 @@ function SpotOrderForm({
             市价
           </div>
           <TradeInput value={quantity} onValueChange={updateQuantity} placeholder="数量" suffix={inputUnit} dense ariaLabel={`数量(${inputUnit})`} />
-          <PercentRail compact />
+          <PercentRail compact resetKey={percentResetKey} onPercentChange={applyBalancePercent} />
         </div>
       )}
 
       <div className="mt-2 space-y-1 text-[0.7rem] leading-tight">
-        <MetricLine label="可用" value={side === 'buy' ? `-- ${quote}` : `-- ${base}`} />
+        <MetricLine label="可用" value={side === 'buy' ? `${formatDecimalDisplay(quoteAvailable)} ${quote}` : `${formatDecimalDisplay(baseAvailable)} ${base}`} />
         <MetricLine label={estimatedPrimaryLabel} value={estimatedPrimaryValue} />
-        <MetricLine label="预计手续费" value={`-- ${feeUnit}`} />
+        <MetricLine label="预计手续费" value={`${estimatedFee || '--'} ${feeUnit}`} />
       </div>
+      {submitReason && (
+        <p className="mt-2 min-h-4 truncate text-[0.68rem] leading-none text-warning">
+          {submitReason}
+        </p>
+      )}
 
-      <button className={`mt-2.5 h-11 w-full rounded-lg text-[0.9rem] font-semibold text-white transition active:brightness-90 cursor-pointer ${actionColor}`} type="button">
-        {actionLabel}
+      <button
+        className={`mt-2.5 flex h-11 w-full items-center justify-center gap-2 rounded-lg text-[0.9rem] font-semibold text-white transition active:brightness-90 ${actionColor} ${submitDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+        disabled={submitDisabled}
+        onClick={submitOrder}
+        type="button"
+      >
+        {isSubmitting && <Loader2 className="size-4 animate-spin" />}
+        {isSubmitting ? '提交中' : actionLabel}
       </button>
     </div>
   );
@@ -1173,11 +1290,21 @@ function TradeInput({
   );
 }
 
-function PercentRail({ compact = false }: { compact?: boolean }) {
+function PercentRail({ compact = false, resetKey, onPercentChange }: { compact?: boolean; resetKey?: string; onPercentChange?: (percent: number) => void }) {
   const [percent, setPercent] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
   const hideTimer = useRef<number | null>(null);
   const points = [0, 25, 50, 75, 100];
+
+  useEffect(() => {
+    setPercent(0);
+    setShowTooltip(false);
+    if (hideTimer.current) {
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }, [resetKey]);
+
   const showTooltipNow = () => {
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
     setShowTooltip(true);
@@ -1210,7 +1337,9 @@ function PercentRail({ compact = false }: { compact?: boolean }) {
           onPointerDown={showTooltipNow}
           onPointerUp={hideTooltipSoon}
           onValueChange={(value) => {
-            setPercent(value[0] ?? 0);
+            const nextPercent = value[0] ?? 0;
+            setPercent(nextPercent);
+            onPercentChange?.(nextPercent);
             showTooltipNow();
           }}
         />
@@ -1579,22 +1708,181 @@ function MarketPicker({
   );
 }
 
-function CurrentOrders() {
+function CurrentOrders({ symbol }: { symbol?: string }) {
+  const [activeTab, setActiveTab] = useState<'open' | 'history'>('open');
+  const [selectedOrderNo, setSelectedOrderNo] = useState<string | null>(null);
+  const isLogin = useAuthStore((state) => state.isLogin);
+  const queryEnabled = Boolean(symbol) && isLogin;
+  const { data: openOrders = [], isLoading: openLoading } = useSpotOpenOrders(symbol ?? '', queryEnabled && activeTab === 'open');
+  const { data: historyPage, isLoading: historyLoading } = useSpotOrderHistory(symbol ?? '', queryEnabled && activeTab === 'history');
+  const { data: orderDetail, isLoading: detailLoading } = useSpotOrderDetail(selectedOrderNo, Boolean(selectedOrderNo));
+  const cancelOrder = useCancelSpotOrder();
+  const rows = activeTab === 'open' ? openOrders : historyPage?.list ?? [];
+  const isLoading = activeTab === 'open' ? openLoading : historyLoading;
+
+  const cancelSelectedOrder = (orderNo: string) => {
+    cancelOrder.mutate({ orderNo, remark: '用户主动撤单' });
+  };
+
   return (
     <div className="col-span-full -mx-4 mt-5 border-t border-line px-4 py-3.5">
       <div className="flex items-center justify-between">
         <div className="no-scrollbar flex min-w-0 gap-4 overflow-x-auto whitespace-nowrap text-[0.9rem] font-semibold">
-          <button className="shrink-0 text-ink">当前委托</button>
-          <button className="shrink-0 text-muted-foreground">历史委托</button>
+          <button className={`shrink-0 cursor-pointer ${activeTab === 'open' ? 'text-ink' : 'text-muted-foreground'}`} onClick={() => setActiveTab('open')} type="button">当前委托</button>
+          <button className={`shrink-0 cursor-pointer ${activeTab === 'history' ? 'text-ink' : 'text-muted-foreground'}`} onClick={() => setActiveTab('history')} type="button">历史委托</button>
         </div>
         <FileText className="size-4.5 text-muted-foreground" />
       </div>
-      <div className="grid min-h-[70px] place-items-center text-muted-foreground">
-        <div className="text-center">
-          <WalletCards className="mx-auto mb-1.5 size-6" />
-          <p className="text-[0.78rem]">暂无订单</p>
+
+      {isLoading ? (
+        <div className="grid min-h-[70px] place-items-center text-[0.78rem] text-muted-foreground">
+          <span className="inline-flex items-center gap-2"><Loader2 className="size-4 animate-spin" />加载中</span>
         </div>
-      </div>
+      ) : rows.length === 0 ? (
+        <div className="grid min-h-[70px] place-items-center text-muted-foreground">
+          <div className="text-center">
+            <WalletCards className="mx-auto mb-1.5 size-6" />
+            <p className="text-[0.78rem]">{!isLogin ? '请先登录查看委托' : symbol ? '暂无订单' : '暂无现货订单'}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {rows.map((order) => (
+            <OrderRow
+              key={order.orderNo}
+              cancelPending={cancelOrder.isPending}
+              onCancel={cancelSelectedOrder}
+              onOpenDetail={setSelectedOrderNo}
+              order={order}
+              showCancel={activeTab === 'open'}
+            />
+          ))}
+        </div>
+      )}
+
+      <OrderDetailDrawer
+        loading={detailLoading}
+        onOpenChange={(open) => {
+          if (!open) setSelectedOrderNo(null);
+        }}
+        open={Boolean(selectedOrderNo)}
+        order={orderDetail}
+      />
+    </div>
+  );
+}
+
+function OrderRow({
+  order,
+  showCancel,
+  cancelPending,
+  onCancel,
+  onOpenDetail,
+}: {
+  order: SpotOrder;
+  showCancel: boolean;
+  cancelPending: boolean;
+  onCancel: (orderNo: string) => void;
+  onOpenDetail: (orderNo: string) => void;
+}) {
+  const sideClass = order.side === 'BUY' ? 'text-buy' : 'text-sell';
+  const canCancel = showCancel && !isFinalOrderStatus(order.orderStatus);
+
+  return (
+    <div className="rounded-md border border-line bg-base2/45 px-3 py-2.5">
+      <button className="w-full cursor-pointer text-left" onClick={() => onOpenDetail(order.orderNo)} type="button">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-[0.82rem] font-semibold text-ink">{symbolFormat.normalize(order.symbolCode)}</p>
+            <p className="mt-1 text-[0.68rem] text-muted-foreground">{formatOrderTime(order.submitTime ?? order.createTime)}</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className={`text-[0.78rem] font-semibold ${sideClass}`}>{formatOrderSide(order.side)} · {formatOrderType(order.orderType)}</p>
+            <p className="mt-1 text-[0.68rem] text-muted-foreground">{formatOrderStatus(order.orderStatus)}</p>
+          </div>
+        </div>
+        <div className="mt-2 grid grid-cols-3 gap-2 text-[0.68rem]">
+          <OrderMetric label="价格" value={formatDecimalDisplay(order.price)} />
+          <OrderMetric label="数量" value={formatDecimalDisplay(order.quantity)} />
+          <OrderMetric label="成交" value={formatDecimalDisplay(order.executedQuantity)} />
+        </div>
+      </button>
+      {canCancel && (
+        <button
+          className="mt-2 h-8 w-full rounded-md border border-line text-[0.76rem] font-semibold text-ink transition-colors hover:bg-soft disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+          disabled={cancelPending}
+          onClick={() => onCancel(order.orderNo)}
+          type="button"
+        >
+          {cancelPending ? '撤单中' : '撤单'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function OrderMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate font-mono text-ink tabular-nums">{value || '--'}</p>
+    </div>
+  );
+}
+
+function OrderDetailDrawer({
+  open,
+  order,
+  loading,
+  onOpenChange,
+}: {
+  open: boolean;
+  order?: SpotOrder;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange} direction="bottom">
+      <DrawerContent className="max-h-[86vh] rounded-t-xl border-line bg-panel p-0 text-ink [&>div:first-child]:hidden">
+        <div className="relative flex h-13 items-center justify-center border-b border-line">
+          <DrawerTitle className="text-[1rem] font-semibold">订单详情</DrawerTitle>
+          <DrawerClose className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer" aria-label="关闭订单详情">
+            <X className="size-5 text-muted-foreground" />
+          </DrawerClose>
+        </div>
+        {loading || !order ? (
+          <div className="grid min-h-[12rem] place-items-center text-[0.8rem] text-muted-foreground">
+            <span className="inline-flex items-center gap-2"><Loader2 className="size-4 animate-spin" />加载中</span>
+          </div>
+        ) : (
+          <div className="space-y-3 overflow-y-auto px-4 py-4 text-[0.8rem]">
+            <DetailLine label="订单号" value={order.orderNo} />
+            <DetailLine label="交易对" value={symbolFormat.normalize(order.symbolCode)} />
+            <DetailLine label="方向/类型" value={`${formatOrderSide(order.side)} · ${formatOrderType(order.orderType)}`} />
+            <DetailLine label="状态" value={formatOrderStatus(order.orderStatus)} />
+            <DetailLine label="委托价格" value={formatDecimalDisplay(order.price)} />
+            <DetailLine label="委托数量" value={formatDecimalDisplay(order.quantity)} />
+            <DetailLine label="委托金额" value={formatDecimalDisplay(order.quoteAmount)} />
+            <DetailLine label="成交数量" value={formatDecimalDisplay(order.executedQuantity)} />
+            <DetailLine label="成交金额" value={formatDecimalDisplay(order.executedQuoteAmount)} />
+            <DetailLine label="成交均价" value={formatDecimalDisplay(order.avgPrice)} />
+            <DetailLine label="手续费" value={`${formatDecimalDisplay(order.feeAmount)} ${order.feeCoinCode ?? ''}`.trim()} />
+            <DetailLine label="冻结" value={`${formatDecimalDisplay(order.frozenAmount)} ${order.frozenCoinCode ?? ''}`.trim()} />
+            <DetailLine label="提交时间" value={formatOrderTime(order.submitTime ?? order.createTime)} />
+            <DetailLine label="完成时间" value={formatOrderTime(order.finishTime)} />
+            {order.cancelReason && <DetailLine label="原因" value={order.cancelReason} />}
+          </div>
+        )}
+      </DrawerContent>
+    </Drawer>
+  );
+}
+
+function DetailLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-start justify-between gap-4 border-b border-line/60 pb-2 last:border-b-0">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className="min-w-0 break-all text-right font-mono text-ink tabular-nums">{value || '--'}</span>
     </div>
   );
 }
@@ -1605,6 +1893,138 @@ function getBaseFromSymbol(symbol: string): string {
 
 function getQuoteFromSymbol(symbol: string): string {
   return symbol.split('/')[1] || '--';
+}
+
+function getSpotBalanceMap(assets: AccountAsset[]): Record<string, SpotOrderBalance> {
+  return assets.reduce<Record<string, SpotOrderBalance>>((map, asset) => {
+    map[asset.coinCode] = {
+      coinCode: asset.coinCode,
+      availableBalance: toRuleDecimal(asset.availableBalance) || '0',
+    };
+    return map;
+  }, {});
+}
+
+function getSpotOrderRule(
+  exchangeInfo: {
+    spotTradingAllowed?: boolean;
+    quoteOrderQtyMarketAllowed?: boolean;
+    orderTypes?: string[];
+    minPrice?: number;
+    maxPrice?: number;
+    tickSize?: number;
+    minQty?: number;
+    maxQty?: number;
+    stepSize?: number;
+    minNotional?: number;
+  } | undefined,
+  tradeConfig: SpotTradeConfig | undefined,
+): SpotOrderRule | undefined {
+  if (!exchangeInfo) return undefined;
+  const spotRule = tradeConfig?.spotRule;
+
+  return {
+    spotTradingAllowed: exchangeInfo.spotTradingAllowed,
+    spotTradable: tradeConfig ? tradeConfig.spotTradable : true,
+    orderTypes: exchangeInfo.orderTypes,
+    quoteOrderQtyMarketAllowed: exchangeInfo.quoteOrderQtyMarketAllowed,
+    minPrice: toRuleDecimal(spotRule?.minPrice ?? exchangeInfo.minPrice),
+    maxPrice: toRuleDecimal(spotRule?.maxPrice ?? exchangeInfo.maxPrice),
+    tickSize: toRuleDecimal(spotRule?.tickSize ?? exchangeInfo.tickSize),
+    minQty: toRuleDecimal(spotRule?.minQty ?? exchangeInfo.minQty),
+    maxQty: toRuleDecimal(spotRule?.maxQty ?? exchangeInfo.maxQty),
+    stepSize: toRuleDecimal(spotRule?.stepSize ?? exchangeInfo.stepSize),
+    minNotional: toRuleDecimal(spotRule?.minNotional ?? exchangeInfo.minNotional),
+  };
+}
+
+function getEstimatedSpotFee({
+  side,
+  isLimitOrder,
+  price,
+  quantity,
+  amount,
+  marketPrice,
+  feeRate,
+}: {
+  side: TradeSide;
+  isLimitOrder: boolean;
+  price: string;
+  quantity: string;
+  amount: string;
+  marketPrice: string;
+  feeRate: string;
+  feeUnit: string;
+}): string {
+  if (!feeRate) return '';
+
+  if (side === 'buy') {
+    const baseQuantity = isLimitOrder ? quantity : divideDecimalStrings(amount, marketPrice, 18);
+    return multiplyDecimalStrings(baseQuantity, feeRate);
+  }
+
+  const effectivePrice = isLimitOrder ? price : marketPrice;
+  return multiplyDecimalStrings(multiplyDecimalStrings(effectivePrice, quantity), feeRate);
+}
+
+function getInputPrecision(primary?: number | null, step?: string, fallback?: number | null): number | undefined {
+  if (typeof primary === 'number' && Number.isInteger(primary) && primary >= 0) return primary;
+  if (step) return getDecimalScale(step);
+  if (typeof fallback === 'number' && Number.isInteger(fallback) && fallback >= 0) return fallback;
+  return undefined;
+}
+
+function getDecimalScale(value: string): number {
+  const [, fractionPart = ''] = value.split('.');
+  return fractionPart.length;
+}
+
+function formatDecimalDisplay(value?: string | number | null): string {
+  const normalized = typeof value === 'number' ? toRuleDecimal(value) : value ?? '';
+  if (!normalized) return '0';
+  if (!normalized.includes('.')) return normalized;
+
+  const [integerPart, fractionPart = ''] = normalized.split('.');
+  const trimmedFraction = fractionPart.slice(0, 8).replace(/0+$/, '');
+  return trimmedFraction ? `${integerPart}.${trimmedFraction}` : integerPart;
+}
+
+function isFinalOrderStatus(status: number): boolean {
+  return [3, 4, 5, 6].includes(status);
+}
+
+function formatOrderSide(side: string): string {
+  if (side === 'BUY') return '买入';
+  if (side === 'SELL') return '卖出';
+  return side || '--';
+}
+
+function formatOrderType(orderType: string): string {
+  if (orderType === 'LIMIT') return '限价';
+  if (orderType === 'MARKET') return '市价';
+  return orderType || '--';
+}
+
+function formatOrderStatus(status: number): string {
+  const statusMap: Record<number, string> = {
+    0: '待提交',
+    1: '已提交',
+    2: '部分成交',
+    3: '完全成交',
+    4: '已撤单',
+    5: '已拒绝',
+    6: '已过期',
+  };
+
+  return statusMap[status] ?? `状态 ${status}`;
+}
+
+function formatOrderTime(value?: string | null): string {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return `${date.getMonth() + 1}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function toDecimalInput(value: string): string {

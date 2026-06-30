@@ -1,5 +1,7 @@
 import { BarChart3, CandlestickChart, Home, User } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { symbolFormat } from '../lib/utils';
+import { useTradeStore } from '../store/trade.store';
 import type { Tab } from '../types/app';
 
 const tabs: Array<{ key: Tab; label: string; icon: typeof Home; to: string }> = [
@@ -11,6 +13,9 @@ const tabs: Array<{ key: Tab; label: string; icon: typeof Home; to: string }> = 
 
 export function BottomNav() {
   const location = useLocation();
+  const currentSymbol = useTradeStore((state) => state.currentSymbol);
+  const normalizedSymbol = symbolFormat.normalize(currentSymbol);
+  const tradePath = normalizedSymbol ? `/trade?symbol=${encodeURIComponent(symbolFormat.toApi(normalizedSymbol))}` : '';
   const activeIndex = Math.max(
     0,
     tabs.findIndex((tab) => tab.to === location.pathname),
@@ -33,7 +38,7 @@ export function BottomNav() {
           return (
             <NavLink
               key={tab.key}
-              to={tab.to}
+              to={tab.key === 'trade' && tradePath ? tradePath : tab.to}
               className={({ isActive }) =>
                 `bottom-nav-link motion-pressable relative z-10 flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-md text-[0.6rem] outline-none ${
                   isActive ? 'font-semibold text-brand' : 'font-medium text-muted-foreground'
