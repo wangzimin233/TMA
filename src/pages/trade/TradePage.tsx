@@ -10,11 +10,13 @@ import { Slider } from '../../components/ui/slider';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { useTradeStore } from '../../store/trade.store';
 import { useAuthStore } from '../../store/auth.store';
-import type { SpotDepthLevel, SpotKlineParams, SpotSummary, SpotTrade, TradeMode } from '../../types/app';
+import type { FuturesDepthLevel, FuturesMarkPrice, FuturesSummary, FuturesTrade, SpotDepthLevel, SpotKlineParams, SpotSummary, SpotTrade, TradeMode } from '../../types/app';
 import { useCancelSpotOrder, usePlaceSpotOrder, useSpotFavoriteStatus, useToggleSpotFavorite, useSpotSummary, useInfiniteSpotKlines, useSpotDepth, useSpotExchangeInfo, useSpotFavorites, useSpotMarketList, useSpotOpenOrders, useSpotOrderDetail, useSpotOrderHistory, useSpotTradeConfig, useSpotTrades } from '../../hooks/useSpotQueries';
+import { useFuturesDepth, useFuturesMarkPrice, useFuturesMarketList, useFuturesSummary, useFuturesTradeConfig, useFuturesTrades, useInfiniteFuturesKlines } from '../../hooks/useFuturesQueries';
 import { useAccountAssets } from '../../hooks/useAccountQueries';
 import { addDecimalStrings, divideDecimalStrings, floorDecimalAtZero, floorDecimalToStep, formatDecimalToPrecision, multiplyDecimalStrings, normalizeDecimalInput, subtractDecimalStrings } from '../../lib/decimal';
 import { buildSpotOrderPayload, getSpotOrderValidation, type SpotOrderBalance, type SpotOrderRule } from '../../lib/spot-order';
+import { formatFuturesFundingRate, formatFuturesFundingTime, formatNullableMarketPercent, formatNullableMarketPrice, formatNullableMarketVolume, getNullableChangeClass, isFiniteNumber } from '../../lib/futures-market';
 import { symbolFormat } from '../../lib/utils';
 import type { AccountAsset } from '../../api/account';
 import type { SpotOrder, SpotTradeConfig } from '../../api/spot';
@@ -35,7 +37,28 @@ type PriceSelectionSignal = {
   price: string;
   nonce: number;
 };
-type TradeTicker = ReturnType<typeof formatSpotSummaryToTicker>;
+type TradeTicker = {
+  symbol: string;
+  base: string;
+  quote: string;
+  price: string;
+  spotPrice: string;
+  fiat: string;
+  change: number | null;
+  changeText: string;
+  delta: string;
+  high: string;
+  low: string;
+  volume: string;
+  turnover: string;
+  iconColor: string;
+  markPrice?: string;
+  indexPrice?: string;
+  fundingRate?: string;
+  nextFundingTime?: string;
+  leverageText?: string;
+};
+type MarketTrade = SpotTrade | FuturesTrade;
 
 type TradePageProps = {
   mode: TradeMode;
@@ -51,18 +74,25 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
   const isLogin = useAuthStore((state) => state.isLogin);
   const [searchParams, setSearchParams] = useSearchParams();
   const [showMarketPicker, setShowMarketPicker] = useState(false);
+  const isContractMode = mode === 'contract';
   const routeSymbolParam = searchParams.get('symbol')?.trim() ?? '';
   const routeSymbol = routeSymbolParam ? symbolFormat.normalize(routeSymbolParam.toUpperCase()) : '';
   const rememberedSymbol = currentSymbol ? symbolFormat.normalize(currentSymbol) : '';
   const shouldLoadDefaultSymbol = !routeSymbol && !rememberedSymbol;
-  const { data: defaultMarketList = [] } = useSpotMarketList({ tab: 'ALL', limit: 1 }, shouldLoadDefaultSymbol);
-  const defaultMarketRows = Array.isArray(defaultMarketList) ? defaultMarketList : [];
+  const { data: defaultMarketList = [] } = useSpotMarketList({ tab: 'ALL', limit: 1 }, shouldLoadDefaultSymbol && !isContractMode);
+  const { data: defaultFuturesMarketList = [] } = useFuturesMarketList({ tab: 'ALL', limit: 1 }, shouldLoadDefaultSymbol && isContractMode);
+  const defaultRowsSource = isContractMode ? defaultFuturesMarketList : defaultMarketList;
+  const defaultMarketRows = Array.isArray(defaultRowsSource) ? defaultRowsSource : [];
 
-  const { data: spotSummary } = useSpotSummary(currentSymbol);
-  const ticker = spotSummary ? formatSpotSummaryToTicker(spotSummary) : undefined;
+  const { data: spotSummary } = useSpotSummary(currentSymbol, !isContractMode);
+  const { data: futuresSummary } = useFuturesSummary(currentSymbol, isContractMode);
+  const { data: futuresMarkPrice } = useFuturesMarkPrice(currentSymbol, isContractMode);
+  const ticker = isContractMode
+    ? futuresSummary ? formatFuturesSummaryToTicker(futuresSummary, futuresMarkPrice) : undefined
+    : spotSummary ? formatSpotSummaryToTicker(spotSummary) : undefined;
 
   // 查询收藏状态
-  const { data: favoriteStatus } = useSpotFavoriteStatus(currentSymbol, isLogin);
+  const { data: favoriteStatus } = useSpotFavoriteStatus(currentSymbol, isLogin && !isContractMode);
   const { mutate: toggleFavorite } = useToggleSpotFavorite();
 
   useEffect(() => {
@@ -100,7 +130,7 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
   };
 
   const handleToggleFavorite = () => {
-    if (!currentSymbol) return;
+    if (!currentSymbol || isContractMode) return;
 
     toggleFavorite({
       symbol: currentSymbol,
@@ -124,6 +154,7 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
         />
         <MarketPicker
           open={showMarketPicker}
+          mode={mode}
           currentSymbol={currentSymbol}
           onOpenChange={setShowMarketPicker}
           onSelect={selectSymbol}
@@ -155,8 +186,8 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
                 <CoinDot /> {currentSymbol} <ChevronDown className="size-4" />
               </button>
               <div className="flex items-center gap-3.5">
-                <button aria-label="收藏交易对" onClick={handleToggleFavorite}>
-                  <Star className={`size-5 ${favoriteStatus?.favorited ? 'fill-brand text-brand' : 'text-muted-foreground'}`} />
+                <button aria-label="合约自选暂未开放" disabled className="cursor-not-allowed opacity-45">
+                  <Star className="size-5 text-muted-foreground" />
                 </button>
                 <button aria-label="打开K线图" onClick={() => setShowChart(true)}>
                   <CandlestickChart className="size-5 text-brand" />
@@ -169,12 +200,14 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
             <p className="mt-1.5 font-mono text-[0.78rem] text-muted-foreground tabular-nums">
               ≈{ticker?.fiat ?? '--'} <span className={getChangeClass(ticker?.change)}>{ticker?.changeText ?? '--'} {ticker?.delta ?? '--'}</span>
             </p>
+            {mode === 'contract' && <ContractTickerMeta ticker={ticker} compact />}
           </div>
           <BinanceOrderPanel mode={mode} symbol={currentSymbol} ticker={ticker} openLeverage={openLeverage} />
         </section>
       )}
       <MarketPicker
         open={showMarketPicker}
+        mode={mode}
         currentSymbol={currentSymbol}
         onOpenChange={setShowMarketPicker}
         onSelect={selectSymbol}
@@ -262,10 +295,10 @@ function SpotTradePage({
           {activeTab === 'chart' && (
             <>
               <KlineIntervalTabs />
-              <CandleChart />
+              <CandleChart mode="spot" />
             </>
           )}
-          {activeTab === 'trades' && <LatestTradesSection symbol={symbol} base={base} />}
+          {activeTab === 'trades' && <LatestTradesSection mode="spot" symbol={symbol} base={base} />}
           {activeTab === 'overview' && <CoinOverviewPanel />}
         </div>
       )}
@@ -304,8 +337,12 @@ function KlineIntervalTabs() {
   );
 }
 
-function LatestTradesSection({ symbol, base }: { symbol: string; base: string }) {
-  const { data: trades = [], isLoading } = useSpotTrades(symbol, 50, true);
+function LatestTradesSection({ mode, symbol, base }: { mode: TradeMode; symbol: string; base: string }) {
+  const isContract = mode === 'contract';
+  const { data: spotTrades = [], isLoading: spotLoading } = useSpotTrades(symbol, 50, !isContract);
+  const { data: futuresTrades = [], isLoading: futuresLoading } = useFuturesTrades(symbol, 50, isContract);
+  const trades = isContract ? futuresTrades : spotTrades;
+  const isLoading = isContract ? futuresLoading : spotLoading;
 
   return (
     <div className="mx-3 mb-3 max-h-[250px] overflow-y-auto rounded-md border border-line bg-base2/45 px-3 py-2 shadow-inner shadow-black/20">
@@ -373,7 +410,12 @@ function ChartTradePage({
             <CoinDot /> {symbol} <ChevronDown className="size-4" />
           </button>
           <div className="flex items-center gap-3.5">
-            <button aria-label="收藏交易对" onClick={onToggleFavorite}>
+            <button
+              aria-label={mode === 'contract' ? '合约自选暂未开放' : '收藏交易对'}
+              className={mode === 'contract' ? 'cursor-not-allowed opacity-45' : 'cursor-pointer'}
+              disabled={mode === 'contract'}
+              onClick={onToggleFavorite}
+            >
               <Star className={`size-5 ${favoriteStatus?.favorited ? 'fill-brand text-brand' : 'text-muted-foreground'}`} />
             </button>
             <button aria-label={mode === 'contract' ? '调整杠杆' : '返回下单'} onClick={mode === 'contract' ? openLeverage : closeChart}>
@@ -389,6 +431,7 @@ function ChartTradePage({
             <p className="mt-1.5 font-mono text-[0.72rem] text-muted-foreground tabular-nums">
               ≈{ticker?.fiat ?? '--'} <span className={getChangeClass(ticker?.change)}>{ticker?.changeText ?? '--'} {ticker?.delta ?? '--'}</span>
             </p>
+            {mode === 'contract' && <ContractTickerMeta ticker={ticker} compact />}
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-right text-[0.68rem] text-muted-foreground">
             <Stat label="24h最高" value={ticker?.high ?? '--'} />
@@ -423,7 +466,7 @@ function ChartTradePage({
           ))}
         </div>
       </div>
-      <CandleChart />
+      <CandleChart mode={mode} />
       <div className="grid grid-cols-2 gap-2.5 px-4 py-3">
         <button className="rounded bg-buy py-2.5 text-[0.9rem] font-semibold text-white" onClick={closeChart}>
           买入
@@ -433,7 +476,7 @@ function ChartTradePage({
         </button>
       </div>
       <div className="px-4 pb-24">
-        <OrderBook base={base} ticker={ticker} />
+        <OrderBook mode={mode} base={base} ticker={ticker} />
       </div>
     </section>
   );
@@ -448,7 +491,19 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function CandleChart() {
+function ContractTickerMeta({ ticker, compact = false }: { ticker?: TradeTicker; compact?: boolean }) {
+  return (
+    <div className={`mt-2 grid min-w-0 grid-cols-2 gap-x-2 gap-y-1 font-mono tabular-nums ${compact ? 'text-[0.64rem]' : 'text-[0.68rem]'}`}>
+      <span className="truncate text-muted-foreground">标记 {ticker?.markPrice ?? '--'}</span>
+      <span className="truncate text-muted-foreground">资金 {ticker?.fundingRate ?? '--'}</span>
+      <span className="truncate text-muted-foreground">指数 {ticker?.indexPrice ?? '--'}</span>
+      <span className="truncate text-muted-foreground">结算 {ticker?.nextFundingTime ?? '--'}</span>
+      {ticker?.leverageText && <span className="col-span-2 truncate text-muted-foreground">杠杆 {ticker.leverageText}</span>}
+    </div>
+  );
+}
+
+function CandleChart({ mode }: { mode: TradeMode }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -462,17 +517,24 @@ function CandleChart() {
   const currentInterval = useTradeStore((state) => state.currentInterval);
   const chartDataKey = `${currentSymbol}:${currentInterval}`;
 
+  const isContract = mode === 'contract';
+  const spotKlinesQuery = useInfiniteSpotKlines({
+    symbol: currentSymbol,
+    interval: currentInterval,
+    limit: KLINE_PAGE_LIMIT,
+  }, !isContract);
+  const futuresKlinesQuery = useInfiniteFuturesKlines({
+    symbol: currentSymbol,
+    interval: currentInterval,
+    limit: KLINE_PAGE_LIMIT,
+  }, isContract);
   const {
     data: klinePages,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
     isLoading,
-  } = useInfiniteSpotKlines({
-    symbol: currentSymbol,
-    interval: currentInterval,
-    limit: KLINE_PAGE_LIMIT,
-  });
+  } = isContract ? futuresKlinesQuery : spotKlinesQuery;
 
   const candleData = useMemo<CandlestickData<UTCTimestamp>[]>(() => {
     const itemsByOpenTime = new Map<number, CandlestickData<UTCTimestamp>>();
@@ -1063,6 +1125,8 @@ function getSpotEstimatedValue({
 function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: TradeMode; symbol: string; ticker?: TradeTicker; openLeverage: () => void }) {
   const base = symbol.split('/')[0] ?? 'BTC';
   const isContract = mode === 'contract';
+  const { data: futuresTradeConfig } = useFuturesTradeConfig(symbol, isContract);
+  const futuresRule = futuresTradeConfig?.futuresRule;
   const [orderType, setOrderType] = useState<OrderType>('limit');
   const [positionMode, setPositionMode] = useState<ContractPositionMode>('open');
   const isLimitOrder = orderType === 'limit';
@@ -1071,6 +1135,8 @@ function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: Trade
   const rightAction = isContract ? (positionMode === 'open' ? '卖出开空' : '平多') : `卖出 ${base}`;
   const contractMetricLabel = positionMode === 'open' ? '可开' : '可平';
   const showContractLimitMeta = isContract && isLimitOrder;
+  const leverageText = futuresRule?.defaultLeverage ? `${futuresRule.defaultLeverage}x` : '10x';
+  const marginModeText = futuresRule?.marginCoinCode ? `${futuresRule.marginCoinCode}保证金` : '全仓';
 
   useEffect(() => {
     setOrderType('limit');
@@ -1149,7 +1215,7 @@ function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: Trade
             生效时间 <span className="text-ink">GTC</span> <ChevronDown className="size-4" />
           </button>
           <button className="rounded border border-line px-3 py-1.5 text-[0.8rem] text-brand" onClick={openLeverage}>
-            全仓 | 10x
+            {marginModeText} | {leverageText}
           </button>
         </div>
       )}
@@ -1162,8 +1228,20 @@ function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: Trade
       )}
 
       <div className="grid grid-cols-2 gap-2.5">
-        <button className="rounded-md bg-buy py-3 text-[0.95rem] font-semibold text-white transition active:brightness-90">{leftAction}</button>
-        <button className="rounded-md bg-sell py-3 text-[0.95rem] font-semibold text-white transition active:brightness-90">{rightAction}</button>
+        <button
+          className={`rounded-md bg-buy py-3 text-[0.95rem] font-semibold text-white transition active:brightness-90 ${isContract ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+          disabled={isContract}
+          type="button"
+        >
+          {leftAction}
+        </button>
+        <button
+          className={`rounded-md bg-sell py-3 text-[0.95rem] font-semibold text-white transition active:brightness-90 ${isContract ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+          disabled={isContract}
+          type="button"
+        >
+          {rightAction}
+        </button>
       </div>
 
       {isContract ? (
@@ -1178,6 +1256,8 @@ function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: Trade
           )}
           <Metric label={contractMetricLabel} value={`0.000 ${base}`} />
           <Metric label={contractMetricLabel} value={`0.000 ${base}`} />
+          <Metric label="最小名义额" value={`${formatDecimalDisplay(futuresRule?.minNotional)} USDT`} />
+          <Metric label="步长" value={formatDecimalDisplay(futuresRule?.stepSize)} />
         </div>
       ) : (
         <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[0.78rem]">
@@ -1394,13 +1474,20 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function OrderBook({ base = 'BTC', ticker }: { base?: string; ticker?: TradeTicker }) {
+function OrderBook({ mode, base = 'BTC', ticker }: { mode: TradeMode; base?: string; ticker?: TradeTicker }) {
   const currentSymbol = useTradeStore((state) => state.currentSymbol);
   const [activeTab, setActiveTab] = useState<OrderBookTab>('book');
   const [depthView, setDepthView] = useState<DepthViewMode>('both');
+  const isContract = mode === 'contract';
 
-  const { data: depth, isLoading } = useSpotDepth(currentSymbol, 10);
-  const { data: trades = [], isLoading: tradesLoading } = useSpotTrades(currentSymbol, 50, activeTab === 'trades');
+  const { data: spotDepth, isLoading: spotDepthLoading } = useSpotDepth(currentSymbol, 20, !isContract);
+  const { data: futuresDepth, isLoading: futuresDepthLoading } = useFuturesDepth(currentSymbol, 20, isContract);
+  const { data: spotTrades = [], isLoading: spotTradesLoading } = useSpotTrades(currentSymbol, 50, activeTab === 'trades' && !isContract);
+  const { data: futuresTrades = [], isLoading: futuresTradesLoading } = useFuturesTrades(currentSymbol, 50, activeTab === 'trades' && isContract);
+  const depth = isContract ? futuresDepth : spotDepth;
+  const isLoading = isContract ? futuresDepthLoading : spotDepthLoading;
+  const trades = isContract ? futuresTrades : spotTrades;
+  const tradesLoading = isContract ? futuresTradesLoading : spotTradesLoading;
 
   const sellRows = (depth?.asks ?? []).slice(0, depthView === 'both' ? 5 : 10).map(formatDepthRow);
 
@@ -1573,7 +1660,7 @@ function DepthRow({
   );
 }
 
-function LatestTrades({ trades, base, isLoading }: { trades: SpotTrade[]; base: string; isLoading: boolean }) {
+function LatestTrades({ trades, base, isLoading }: { trades: MarketTrade[]; base: string; isLoading: boolean }) {
   return (
     <div className="min-w-0">
       <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_minmax(4.5rem,0.72fr)] gap-2 px-1 text-[0.68rem] text-muted-foreground">
@@ -1602,11 +1689,13 @@ function LatestTrades({ trades, base, isLoading }: { trades: SpotTrade[]; base: 
 
 function MarketPicker({
   open,
+  mode,
   currentSymbol,
   onOpenChange,
   onSelect,
 }: {
   open: boolean;
+  mode: TradeMode;
   currentSymbol: string;
   onOpenChange: (open: boolean) => void;
   onSelect: (symbol: string) => void;
@@ -1614,19 +1703,24 @@ function MarketPicker({
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<MarketPickerTab>('热门');
   const isLogin = useAuthStore((state) => state.isLogin);
+  const isContract = mode === 'contract';
   const isFavoriteTab = activeTab === '自选';
   const normalizedQuery = query.trim();
   const marketTab = activeTab === '热门' ? 'HOT' : activeTab === '涨幅榜' ? 'GAINERS' : 'LOSERS';
   const { data: marketList = [], isLoading: marketLoading } = useSpotMarketList({
     keyword: normalizedQuery || undefined,
     tab: marketTab,
-  }, !isFavoriteTab);
-  const { data: favoriteList = [], isLoading: favoritesLoading } = useSpotFavorites(isFavoriteTab && isLogin);
+  }, !isFavoriteTab && !isContract);
+  const { data: futuresMarketList = [], isLoading: futuresMarketLoading } = useFuturesMarketList({
+    keyword: normalizedQuery || undefined,
+    tab: marketTab,
+  }, !isFavoriteTab && isContract);
+  const { data: favoriteList = [], isLoading: favoritesLoading } = useSpotFavorites(isFavoriteTab && isLogin && !isContract);
   const favoriteRows = isLogin ? favoriteList : [];
-  const rowsSource = isFavoriteTab ? favoriteRows : marketList;
+  const rowsSource = isFavoriteTab ? (isContract ? [] : favoriteRows) : isContract ? futuresMarketList : marketList;
   const rows = Array.isArray(rowsSource) ? rowsSource : [];
-  const isLoading = isFavoriteTab && isLogin ? favoritesLoading : marketLoading;
-  const emptyText = isFavoriteTab && !isLogin ? '请登录后查看' : isFavoriteTab ? '暂无自选' : '暂无交易对';
+  const isLoading = isFavoriteTab && isLogin && !isContract ? favoritesLoading : isContract && !isFavoriteTab ? futuresMarketLoading : marketLoading;
+  const emptyText = isFavoriteTab && isContract ? '合约自选暂未开放' : isFavoriteTab && !isLogin ? '请登录后查看' : isFavoriteTab ? '暂无自选' : '暂无交易对';
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="bottom">
@@ -1694,9 +1788,9 @@ function MarketPicker({
                   <span className="truncate text-[0.95rem] font-semibold">{symbol}</span>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-[0.9rem] font-semibold text-ink tabular-nums">{formatPriceString(row.lastPrice)}</p>
+                  <p className="font-mono text-[0.9rem] font-semibold text-ink tabular-nums">{formatNullableMarketPrice(row.lastPrice)}</p>
                   <p className={`mt-1 font-mono text-[0.78rem] tabular-nums ${getChangeClass(row.priceChangePercent)}`}>
-                    {row.priceChangePercent >= 0 ? '+' : ''}{row.priceChangePercent.toFixed(2)}%
+                    {formatNullableMarketPercent(row.priceChangePercent)}
                   </p>
                 </div>
               </button>
@@ -2068,6 +2162,50 @@ function formatSpotSummaryToTicker(summary: SpotSummary) {
   };
 }
 
+function formatFuturesSummaryToTicker(summary: FuturesSummary, markPrice?: FuturesMarkPrice): TradeTicker {
+  const base = summary.baseCoinCode;
+  const change = summary.priceChangePercent;
+  const lastPrice = isFiniteNumber(summary.lastPrice) ? summary.lastPrice : markPrice?.markPrice;
+  const previousPrice = isFiniteNumber(change) && isFiniteNumber(lastPrice) && change !== -100
+    ? lastPrice / (1 + change / 100)
+    : undefined;
+  const delta = isFiniteNumber(lastPrice) && isFiniteNumber(previousPrice)
+    ? `${change && change >= 0 ? '+' : ''}${formatNullableMarketPrice(Math.abs(lastPrice - previousPrice))}`
+    : '--';
+  const mark = markPrice?.markPrice ?? summary.markPrice;
+  const index = markPrice?.indexPrice ?? summary.indexPrice;
+  const fundingRate = markPrice?.lastFundingRate ?? summary.lastFundingRate;
+  const nextFundingTime = markPrice?.nextFundingTime ?? summary.nextFundingTime;
+
+  return {
+    symbol: symbolFormat.normalize(summary.symbolCode),
+    base,
+    quote: summary.quoteCoinCode,
+    price: formatNullableMarketPrice(lastPrice),
+    spotPrice: formatNullableMarketPrice(lastPrice),
+    fiat: `$${formatNullableMarketPrice(lastPrice)}`,
+    change,
+    changeText: formatNullableMarketPercent(change),
+    delta,
+    high: formatNullableMarketPrice(summary.highPrice),
+    low: formatNullableMarketPrice(summary.lowPrice),
+    volume: formatNullableMarketVolume(summary.volume),
+    turnover: formatNullableMarketVolume(summary.quoteVolume),
+    markPrice: formatNullableMarketPrice(mark),
+    indexPrice: formatNullableMarketPrice(index),
+    fundingRate: formatFuturesFundingRate(fundingRate),
+    nextFundingTime: formatFuturesFundingTime(nextFundingTime),
+    leverageText: formatLeverageRange(summary.minLeverage, summary.maxLeverage, summary.defaultLeverage),
+    iconColor: '#F7931A',
+  };
+}
+
+function formatLeverageRange(minLeverage?: number | null, maxLeverage?: number | null, defaultLeverage?: number | null): string | undefined {
+  if (!isFiniteNumber(minLeverage) || !isFiniteNumber(maxLeverage)) return undefined;
+  const defaultText = isFiniteNumber(defaultLeverage) ? ` 默认 ${defaultLeverage}x` : '';
+  return `${minLeverage}x-${maxLeverage}x${defaultText}`;
+}
+
 function formatPriceString(price: number): string {
   if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (price >= 1) return price.toFixed(2);
@@ -2075,12 +2213,11 @@ function formatPriceString(price: number): string {
   return price.toFixed(6);
 }
 
-function getChangeClass(change?: number): string {
-  if (typeof change !== 'number') return 'text-muted-foreground';
-  return change >= 0 ? 'text-buy' : 'text-sell';
+function getChangeClass(change?: number | null): string {
+  return getNullableChangeClass(change);
 }
 
-function formatDepthRow(level: SpotDepthLevel) {
+function formatDepthRow(level: SpotDepthLevel | FuturesDepthLevel) {
   return {
     price: formatPriceString(level.price),
     amount: formatDepthQuantity(level.quantity),

@@ -133,7 +133,11 @@ function App() {
 
     navigate(`/transfer?from=${encodeURIComponent(fromAccountType)}`);
   };
-  const openTrade = (symbol?: string) => {
+  const openTrade = (symbol?: string, mode?: 'spot' | 'contract') => {
+    if (mode) {
+      setTradeMode(mode);
+    }
+
     if (symbol) {
       const normalizedSymbol = symbolFormat.normalize(symbol);
       setCurrentSymbol(normalizedSymbol);

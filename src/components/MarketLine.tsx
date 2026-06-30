@@ -1,4 +1,5 @@
 import type { MarketPairView } from '../types/app';
+import { formatNullableMarketPercent, getNullableChangeClass } from '../lib/futures-market';
 
 export function MarketLine({ pair }: { pair: MarketPairView }) {
   return (
@@ -11,10 +12,14 @@ export function MarketLine({ pair }: { pair: MarketPairView }) {
         <p className="font-mono text-[0.98rem] font-semibold tabular-nums">{pair.price}</p>
         <p className="font-mono text-[0.7rem] text-muted-foreground tabular-nums">{pair.fiat}</p>
       </div>
-      <div className={`ml-2 rounded px-1.5 py-1.5 text-center font-mono text-[0.78rem] font-semibold text-white tabular-nums ${pair.change >= 0 ? 'bg-buy' : 'bg-sell'}`}>
-        {pair.change >= 0 ? '+' : ''}
-        {pair.change.toFixed(2)}%
+      <div className={`ml-2 rounded px-1.5 py-1.5 text-center font-mono text-[0.78rem] font-semibold tabular-nums ${getMarketLineChangeClass(pair.change)}`}>
+        {formatNullableMarketPercent(pair.change)}
       </div>
     </div>
   );
+}
+
+function getMarketLineChangeClass(change: number | null): string {
+  if (getNullableChangeClass(change) === 'text-muted-foreground') return 'bg-soft2 text-muted-foreground';
+  return change !== null && change >= 0 ? 'bg-buy text-white' : 'bg-sell text-white';
 }

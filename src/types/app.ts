@@ -8,7 +8,7 @@ export type MarketPairView = {
   quote: string;
   price: string;
   fiat: string;
-  change: number;
+  change: number | null;
   volume: string;
   iconColor: string;
 };
@@ -185,3 +185,108 @@ export type SpotKlineParams = {
   endTime?: number;
   limit?: number;
 };
+
+// ============ 合约公开行情相关类型 ============
+
+export type FuturesSymbol = {
+  symbolId: number;
+  symbolCode: string;
+  symbolName: string;
+  baseCoinCode: string;
+  quoteCoinCode: string;
+  displaySort: number;
+};
+
+export type FuturesMarketItem = {
+  symbolId: number;
+  symbolCode: string;
+  symbolName: string;
+  baseCoinCode: string;
+  quoteCoinCode: string;
+  displaySort: number;
+  lastPrice: number | null;
+  markPrice: number | null;
+  indexPrice: number | null;
+  openPrice: number | null;
+  highPrice: number | null;
+  lowPrice: number | null;
+  volume: number | null;
+  quoteVolume: number | null;
+  priceChangePercent: number | null;
+  lastFundingRate: number | null;
+  nextFundingTime: number | null;
+};
+
+export type FuturesSummary = {
+  symbolId: number;
+  symbolCode: string;
+  symbolName: string;
+  baseCoinCode: string;
+  quoteCoinCode: string;
+  futuresEnabled: number;
+  tradeStatus: number;
+  priceIndexEnabled: number;
+  lastPrice: number | null;
+  markPrice: number | null;
+  indexPrice: number | null;
+  highPrice: number | null;
+  lowPrice: number | null;
+  volume: number | null;
+  quoteVolume: number | null;
+  priceChangePercent: number | null;
+  bestBidPrice: number | null;
+  bestBidQuantity: number | null;
+  bestAskPrice: number | null;
+  bestAskQuantity: number | null;
+  lastFundingRate: number | null;
+  nextFundingTime: number | null;
+  tickSize: number;
+  minQty: number;
+  stepSize: number;
+  minNotional: number;
+  defaultLeverage: number | null;
+  minLeverage: number | null;
+  maxLeverage: number | null;
+};
+
+export type FuturesMarkPrice = {
+  symbolCode: string;
+  markPrice: number | null;
+  indexPrice: number | null;
+  estimatedSettlePrice: number | null;
+  lastFundingRate: number | null;
+  nextFundingTime: number | null;
+  eventTime: number | null;
+};
+
+export type FuturesKline = SpotKline;
+
+export type FuturesDepth = {
+  symbol: string;
+  lastUpdateId: number;
+  bids: FuturesDepthLevel[];
+  asks: FuturesDepthLevel[];
+};
+
+export type FuturesDepthLevel = SpotDepthLevel;
+
+export type FuturesTrade = {
+  tradeId: number;
+  price: number;
+  quantity: number;
+  quoteQuantity: number;
+  tradeTime: number;
+  buyerMaker: boolean;
+  bestMatch: boolean | null;
+};
+
+export type FuturesMarketListParams = {
+  keyword?: string;
+  tab?: 'ALL' | 'HOT' | 'GAINERS' | 'LOSERS' | 'NEW';
+  direction?: 'UP' | 'DOWN';
+  sortBy?: 'displaySort' | 'priceChangePercent' | 'quoteVolume' | 'lastPrice' | 'markPrice' | 'lastFundingRate' | 'createTime';
+  sortDirection?: 'ASC' | 'DESC';
+  limit?: number;
+};
+
+export type FuturesKlineParams = SpotKlineParams;

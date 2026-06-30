@@ -54,14 +54,14 @@ export function useSpotTickers(symbols?: string) {
 /**
  * 查询现货币对详情摘要
  */
-export function useSpotSummary(symbol: string) {
+export function useSpotSummary(symbol: string, enabled = true) {
   const symbolCode = symbolFormat.toApi(symbol);
 
   return useQuery({
     queryKey: ['spot', 'summary', symbolCode],
     queryFn: () => spotApi.getSummary(symbolCode),
     refetchInterval: 3000, // 每3秒自动刷新
-    enabled: !!symbol,
+    enabled: enabled && !!symbol,
   });
 }
 
@@ -83,7 +83,7 @@ export function useSpotKlines(params: SpotKlineParams) {
 /**
  * 分页查询现货K线，向左滑动时按 endTime 加载更早历史
  */
-export function useInfiniteSpotKlines(params: Pick<SpotKlineParams, 'symbol' | 'interval' | 'limit'>) {
+export function useInfiniteSpotKlines(params: Pick<SpotKlineParams, 'symbol' | 'interval' | 'limit'>, enabled = true) {
   const { symbol, interval, limit = 500 } = params;
   const symbolCode = symbolFormat.toApi(symbol);
 
@@ -108,21 +108,21 @@ export function useInfiniteSpotKlines(params: Pick<SpotKlineParams, 'symbol' | '
       return earliestOpenTime === undefined ? undefined : earliestOpenTime - 1;
     },
     staleTime: 10000,
-    enabled: !!symbol && !!interval,
+    enabled: enabled && !!symbol && !!interval,
   });
 }
 
 /**
  * 查询现货盘口深度
  */
-export function useSpotDepth(symbol: string, limit = 20) {
+export function useSpotDepth(symbol: string, limit = 20, enabled = true) {
   const symbolCode = symbolFormat.toApi(symbol);
 
   return useQuery({
     queryKey: ['spot', 'depth', symbolCode, limit],
     queryFn: () => spotApi.getDepth(symbolCode, limit),
     refetchInterval: 2000, // 每2秒自动刷新
-    enabled: !!symbol,
+    enabled: enabled && !!symbol,
   });
 }
 

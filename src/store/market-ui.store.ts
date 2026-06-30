@@ -3,7 +3,7 @@ import { create } from 'zustand';
 export type MarketMainTab = '自选' | '现货' | '合约' | '榜单';
 export type MarketSubTab = '全部' | '热门' | '涨幅榜' | '跌幅榜';
 export type HomeMarketTab = '自选' | '热门' | '涨幅榜' | '跌幅榜';
-export type HomeMarketTypeFilter = '全部' | '现货' | '合约';
+export type HomeMarketTypeFilter = '现货' | '合约';
 
 type MarketUiState = {
   mainTab: MarketMainTab;
@@ -28,7 +28,7 @@ export const useMarketUiStore = create<MarketUiState>((set) => ({
   mainTab: '现货',
   subTab: '全部',
   homeMarketTab: '热门',
-  homeMarketType: '全部',
+  homeMarketType: '现货',
   searchQuery: '',
   showSearch: false,
   scrollY: 0,

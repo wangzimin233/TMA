@@ -1,14 +1,16 @@
 import { useLayoutEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 import { useSpotMarketList, useSpotFavorites } from '../../hooks/useSpotQueries';
+import { useFuturesMarketList } from '../../hooks/useFuturesQueries';
 import { useTradeStore } from '../../store/trade.store';
 import { useMarketUiStore } from '../../store/market-ui.store';
 import { useAuthStore } from '../../store/auth.store';
+import { formatNullableMarketPercent, formatNullableMarketPrice, formatNullableMarketVolume, getNullableChangeClass } from '../../lib/futures-market';
 import { symbolFormat } from '../../lib/utils';
 import { scrollViewportTo } from '../../lib/scroll';
-import type { SpotMarketListParams } from '../../types/app';
+import type { FuturesMarketListParams, SpotMarketListParams, TradeMode } from '../../types/app';
 
-export function MarketPage({ openTrade }: { openTrade: (symbol?: string) => void }) {
+export function MarketPage({ openTrade }: { openTrade: (symbol?: string, mode?: TradeMode) => void }) {
   const mainTab = useMarketUiStore((state) => state.mainTab);
   const subTab = useMarketUiStore((state) => state.subTab);
   const searchQuery = useMarketUiStore((state) => state.searchQuery);
@@ -21,28 +23,38 @@ export function MarketPage({ openTrade }: { openTrade: (symbol?: string) => void
   const setShowSearch = useMarketUiStore((state) => state.setShowSearch);
   const resetScrollPosition = useMarketUiStore((state) => state.resetScrollPosition);
   const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
+  const setTradeMode = useTradeStore((state) => state.setTradeMode);
   const setShowChart = useTradeStore((state) => state.setShowChart);
   const isLogin = useAuthStore((state) => state.isLogin);
   const didRestoreAfterLoadRef = useRef(false);
-  const isPlaceholderTab = mainTab === '合约' || mainTab === '榜单';
+  const isPlaceholderTab = mainTab === '榜单';
   const isSpotTab = mainTab === '现货';
+  const isContractTab = mainTab === '合约';
   const isFavoriteTab = mainTab === '自选';
+  const marketTab = subTab === '全部' ? 'ALL' : subTab === '热门' ? 'HOT' : subTab === '涨幅榜' ? 'GAINERS' : 'LOSERS';
 
   // 构建API查询参数
   const params: SpotMarketListParams | undefined = isSpotTab
     ? {
         keyword: searchQuery || undefined,
-        tab: subTab === '全部' ? 'ALL' : subTab === '热门' ? 'HOT' : subTab === '涨幅榜' ? 'GAINERS' : 'LOSERS',
+        tab: marketTab,
+      }
+    : undefined;
+  const futuresParams: FuturesMarketListParams | undefined = isContractTab
+    ? {
+        keyword: searchQuery || undefined,
+        tab: marketTab,
       }
     : undefined;
 
   // 根据tab选择数据源
   const { data: marketList = [], isLoading: marketLoading } = useSpotMarketList(params, isSpotTab);
+  const { data: futuresMarketList = [], isLoading: futuresMarketLoading } = useFuturesMarketList(futuresParams, isContractTab);
   const { data: favoriteList = [], isLoading: favoritesLoading } = useSpotFavorites(isFavoriteTab && isLogin);
   const favoriteRows = isLogin ? favoriteList : [];
 
-  const rows = isPlaceholderTab ? [] : isFavoriteTab ? favoriteRows : marketList;
-  const isLoading = isPlaceholderTab ? false : isFavoriteTab && isLogin ? favoritesLoading : marketLoading;
+  const rows = isPlaceholderTab ? [] : isFavoriteTab ? favoriteRows : isContractTab ? futuresMarketList : marketList;
+  const isLoading = isPlaceholderTab ? false : isFavoriteTab && isLogin ? favoritesLoading : isContractTab ? futuresMarketLoading : marketLoading;
 
   // 确保是数组类型
   const rowsArray = Array.isArray(rows) ? rows : [];
@@ -61,11 +73,12 @@ export function MarketPage({ openTrade }: { openTrade: (symbol?: string) => void
     scrollViewportTo(0);
   };
 
-  const handleRowClick = (symbolCode: string) => {
+  const handleRowClick = (symbolCode: string, mode: TradeMode) => {
     const normalizedSymbol = symbolFormat.normalize(symbolCode);
     setCurrentSymbol(normalizedSymbol);
+    setTradeMode(mode);
     setShowChart(true);
-    openTrade(normalizedSymbol);
+    openTrade(normalizedSymbol, mode);
   };
 
   return (
@@ -81,7 +94,7 @@ export function MarketPage({ openTrade }: { openTrade: (symbol?: string) => void
                   if (item === mainTab) return;
 
                   setMainTab(item);
-                  if (item !== '现货') {
+                  if (item !== '现货' && item !== '合约') {
                     setSubTab('全部');
                   }
                   resetMarketListPosition();
@@ -122,7 +135,7 @@ export function MarketPage({ openTrade }: { openTrade: (symbol?: string) => void
             </button>
           )}
         </div>
-        {isSpotTab && (
+        {(isSpotTab || isContractTab) && (
           <div className="no-scrollbar -mx-4 mt-3.5 flex items-center gap-4 overflow-x-auto whitespace-nowrap px-4 text-[0.82rem] text-muted-foreground">
             {(['全部', '热门', '涨幅榜', '跌幅榜'] as const).map((item) => (
               <button
@@ -158,23 +171,22 @@ export function MarketPage({ openTrade }: { openTrade: (symbol?: string) => void
             <button
               key={row.symbolCode}
               className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_minmax(94px,1fr)_76px] items-center border-b border-line px-4 py-2.5 text-left"
-              onClick={() => handleRowClick(row.symbolCode)}
+              onClick={() => handleRowClick(row.symbolCode, isContractTab ? 'contract' : 'spot')}
             >
               <div>
                 <p className="text-[0.95rem] font-medium">{row.symbolName}</p>
-                <p className="mt-1 text-[0.72rem] text-muted-foreground">Vol {formatVolume(row.volume)}</p>
+                <p className="mt-1 text-[0.72rem] text-muted-foreground">Vol {formatNullableMarketVolume(row.volume)}</p>
               </div>
               <div className="min-w-0 text-right">
-                <p className={`font-mono text-[0.96rem] tabular-nums ${row.priceChangePercent >= 0 ? 'text-buy' : 'text-sell'}`}>
-                  {formatPrice(row.lastPrice)}
+                <p className={`font-mono text-[0.96rem] tabular-nums ${getNullableChangeClass(row.priceChangePercent)}`}>
+                  {formatNullableMarketPrice(row.lastPrice)}
                 </p>
                 <p className="mt-1 font-mono text-[0.7rem] text-muted-foreground tabular-nums">
-                  ≈${formatPrice(row.lastPrice)}
+                  ≈${formatNullableMarketPrice(row.lastPrice)}
                 </p>
               </div>
-              <span className={`ml-2 rounded px-1.5 py-1.5 text-center font-mono text-[0.78rem] font-semibold text-white tabular-nums ${row.priceChangePercent >= 0 ? 'bg-buy' : 'bg-sell'}`}>
-                {row.priceChangePercent >= 0 ? '+' : ''}
-                {row.priceChangePercent.toFixed(2)}%
+              <span className={`ml-2 rounded px-1.5 py-1.5 text-center font-mono text-[0.78rem] font-semibold text-white tabular-nums ${getChangeBgClass(row.priceChangePercent)}`}>
+                {formatNullableMarketPercent(row.priceChangePercent)}
               </span>
             </button>
           ))
@@ -184,14 +196,7 @@ export function MarketPage({ openTrade }: { openTrade: (symbol?: string) => void
   );
 }
 
-function formatPrice(price: number): string {
-  if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (price >= 1) return price.toFixed(2);
-  return price.toFixed(6);
-}
-
-function formatVolume(volume: number): string {
-  if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
-  if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
-  return volume.toFixed(2);
+function getChangeBgClass(change?: number | null): string {
+  if (typeof change !== 'number' || !Number.isFinite(change)) return 'bg-soft2 text-muted-foreground';
+  return change >= 0 ? 'bg-buy' : 'bg-sell';
 }

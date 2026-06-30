@@ -12,13 +12,15 @@ import {
 import { quickActions } from '../../data/mock';
 import { useAccountOverview } from '../../hooks/useAccountQueries';
 import { useSpotMarketList, useSpotFavorites } from '../../hooks/useSpotQueries';
+import { useFuturesMarketList } from '../../hooks/useFuturesQueries';
 import { useMarketUiStore, type HomeMarketTab, type HomeMarketTypeFilter } from '../../store/market-ui.store';
 import { useTradeStore } from '../../store/trade.store';
+import { formatNullableMarketPercent, formatNullableMarketPrice, formatNullableMarketVolume, getNullableChangeClass } from '../../lib/futures-market';
 import { symbolFormat } from '../../lib/utils';
-import type { MarketPairView } from '../../types/app';
+import type { FuturesMarketItem, MarketPairView, SpotMarketItem, TradeMode } from '../../types/app';
 
 const homeMarketTabs = ['自选', '热门', '涨幅榜', '跌幅榜'] as const satisfies readonly HomeMarketTab[];
-const marketTypeFilters = ['全部', '现货', '合约'] as const satisfies readonly HomeMarketTypeFilter[];
+const marketTypeFilters = ['现货', '合约'] as const satisfies readonly HomeMarketTypeFilter[];
 
 export function HomePage({
   isLogin,
@@ -32,7 +34,7 @@ export function HomePage({
   openAuth: () => void;
   openDeposit: () => void;
   openWithdraw: () => void;
-  openTrade: (symbol?: string) => void;
+  openTrade: (symbol?: string, mode?: TradeMode) => void;
   openProfile: () => void;
 }) {
   // 查询热门币种前3个
@@ -46,11 +48,12 @@ export function HomePage({
   const pnlText = isLogin && accountOverview ? `${formatSigned(accountOverview.todayPnlValue)} ${valuationCoinCode}` : '--';
   const estimatedText = isLogin && accountOverview ? `≈ ${formatNumber(accountOverview.estimatedTotalValue)} ${valuationCoinCode}` : '--';
 
-  const openPair = (symbolCode: string) => {
+  const openPair = (symbolCode: string, mode: TradeMode = 'spot') => {
     const normalizedSymbol = symbolFormat.normalize(symbolCode);
     setCurrentSymbol(normalizedSymbol);
+    setTradeMode(mode);
     setShowChart(true);
-    openTrade(normalizedSymbol);
+    openTrade(normalizedSymbol, mode);
   };
 
   const openTradeMode = (mode: 'spot' | 'contract') => {
@@ -132,16 +135,16 @@ export function HomePage({
 
         <div className="grid grid-cols-3 gap-2.5">
           {hotMarketsArray.slice(0, 3).map((item) => (
-            <button key={item.symbolCode} className="text-left" onClick={() => openPair(item.symbolCode)}>
+            <button key={item.symbolCode} className="text-left" onClick={() => openPair(item.symbolCode, 'spot')}>
               <CoinCard
                 pair={{
                   symbol: symbolFormat.normalize(item.symbolCode),
                   base: item.baseCoinCode,
                   quote: item.quoteCoinCode,
-                  price: formatPrice(item.lastPrice),
-                  fiat: `$${formatPrice(item.lastPrice)}`,
+                  price: formatNullableMarketPrice(item.lastPrice),
+                  fiat: `$${formatNullableMarketPrice(item.lastPrice)}`,
                   change: item.priceChangePercent,
-                  volume: formatVolume(item.volume),
+                  volume: formatNullableMarketVolume(item.volume),
                   iconColor: '#F7931A', // 默认颜色
                 }}
               />
@@ -180,20 +183,6 @@ function getSignedClass(value?: number) {
   return 'text-muted-foreground';
 }
 
-function formatPrice(price: number): string {
-  if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (price >= 1) return price.toFixed(2);
-  if (price >= 0.01) return price.toFixed(4);
-  return price.toFixed(6);
-}
-
-function formatVolume(volume: number): string {
-  if (volume >= 1000000000) return `${(volume / 1000000000).toFixed(2)}B`;
-  if (volume >= 1000000) return `${(volume / 1000000).toFixed(1)}M`;
-  if (volume >= 1000) return `${(volume / 1000).toFixed(1)}K`;
-  return volume.toFixed(2);
-}
-
 function CoinCard({ pair }: { pair: MarketPairView }) {
   return (
     <div className="min-w-0 rounded-md border border-line bg-panel p-2.5">
@@ -204,14 +193,16 @@ function CoinCard({ pair }: { pair: MarketPairView }) {
         <span className="truncate text-[0.92rem] font-semibold">{pair.base}</span>
       </div>
       <p className="mt-2.5 truncate font-mono text-[0.78rem] text-muted-foreground tabular-nums">{pair.fiat}</p>
-      <p className={`mt-1.5 font-mono text-[0.82rem] tabular-nums ${pair.change >= 0 ? 'text-buy' : 'text-sell'}`}>
-        ↙ {Math.abs(pair.change).toFixed(2)}%
+      <p className={`mt-1.5 font-mono text-[0.82rem] tabular-nums ${getNullableChangeClass(pair.change)}`}>
+        {formatNullableMarketPercent(pair.change)}
       </p>
     </div>
   );
 }
 
-function MarketPreview({ openPair, isLogin }: { openPair: (symbolCode: string) => void; isLogin: boolean }) {
+type HomeMarketRow = (SpotMarketItem | FuturesMarketItem) & { marketMode: TradeMode };
+
+function MarketPreview({ openPair, isLogin }: { openPair: (symbolCode: string, mode?: TradeMode) => void; isLogin: boolean }) {
   const activeTab = useMarketUiStore((state) => state.homeMarketTab);
   const marketType = useMarketUiStore((state) => state.homeMarketType);
   const setActiveTab = useMarketUiStore((state) => state.setHomeMarketTab);
@@ -225,22 +216,29 @@ function MarketPreview({ openPair, isLogin }: { openPair: (symbolCode: string) =
     '跌幅榜': 'LOSERS' as const,
   };
 
-  const { data: marketList = [] } = useSpotMarketList(
-    activeTab !== '自选' ? { tab: tabMap[activeTab], limit: 5 } : undefined
-  );
+  const listParams = activeTab !== '自选' ? { tab: tabMap[activeTab], limit: 5 } : undefined;
+  const shouldLoadSpotList = activeTab !== '自选' && marketType === '现货';
+  const shouldLoadFuturesList = activeTab !== '自选' && marketType === '合约';
+  const { data: marketList = [] } = useSpotMarketList(listParams, shouldLoadSpotList);
+  const { data: futuresMarketList = [] } = useFuturesMarketList(listParams, shouldLoadFuturesList);
   const { data: favoriteList = [] } = useSpotFavorites(activeTab === '自选' && isLogin);
   const favoriteRows = isLogin ? favoriteList : [];
 
   const displayedPairs = useMemo(() => {
-    const sourceList = activeTab === '自选' ? favoriteRows : marketList;
-    const sourceArray = Array.isArray(sourceList) ? sourceList : [];
-
-    if (marketType === '合约') {
-      return [];
+    if (activeTab === '自选') {
+      if (marketType === '合约') return [];
+      return (Array.isArray(favoriteRows) ? favoriteRows : [])
+        .slice(0, 5)
+        .map((row) => ({ ...row, marketMode: 'spot' as const }));
     }
 
-    return sourceArray.slice(0, 5);
-  }, [activeTab, marketType, marketList, favoriteRows]);
+    const sourceRows = marketType === '现货' ? marketList : futuresMarketList;
+    const mode: TradeMode = marketType === '现货' ? 'spot' : 'contract';
+
+    return (Array.isArray(sourceRows) ? sourceRows : [])
+      .slice(0, 5)
+      .map((row) => ({ ...row, marketMode: mode }));
+  }, [activeTab, marketType, marketList, futuresMarketList, favoriteRows]);
 
   return (
     <div>
@@ -305,16 +303,16 @@ function MarketPreview({ openPair, isLogin }: { openPair: (symbolCode: string) =
           </div>
         ) : (
           displayedPairs.map((item) => (
-            <button key={item.symbolCode} className="block w-full text-left" onClick={() => openPair(item.symbolCode)}>
+            <button key={`${item.marketMode}-${item.symbolCode}`} className="block w-full text-left" onClick={() => openPair(item.symbolCode, item.marketMode)}>
               <MarketLine
                 pair={{
                   symbol: symbolFormat.normalize(item.symbolCode),
                   base: item.baseCoinCode,
                   quote: item.quoteCoinCode,
-                  price: formatPrice(item.lastPrice),
-                  fiat: `$${formatPrice(item.lastPrice)}`,
+                  price: formatNullableMarketPrice(item.lastPrice),
+                  fiat: `$${formatNullableMarketPrice(item.lastPrice)}`,
                   change: item.priceChangePercent,
-                  volume: formatVolume(item.volume),
+                  volume: formatNullableMarketVolume(item.volume),
                   iconColor: '#F7931A',
                 }}
               />
