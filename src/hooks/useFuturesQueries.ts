@@ -1,8 +1,25 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import { futuresApi } from '../api/futures';
+import type { FuturesOrderHistoryParams } from '../api/futures';
 import type { FuturesKline, FuturesKlineParams, FuturesMarketListParams } from '../types/app';
 import { symbolFormat } from '../lib/utils';
+import { accountQueryKeys } from './useAccountQueries';
+import type { FuturesPlaceOrderPayload } from '../lib/futures-order';
+import { toast } from 'sonner';
+import { getErrorMessage } from '../api/client';
+
+export const futuresOrderQueryKeys = {
+  root: ['futures', 'orders'] as const,
+  open: (symbolCode?: string) => ['futures', 'orders', 'open', symbolCode ?? 'ALL'] as const,
+  history: (params?: FuturesOrderHistoryParams) => ['futures', 'orders', 'history', params ?? {}] as const,
+  detail: (orderNo?: string) => ['futures', 'orders', 'detail', orderNo ?? ''] as const,
+};
+
+export const futuresPositionQueryKeys = {
+  root: ['futures', 'positions'] as const,
+  list: (symbolCode?: string) => ['futures', 'positions', symbolCode ?? 'ALL'] as const,
+};
 
 export function useFuturesSymbols() {
   return useQuery({
@@ -114,5 +131,65 @@ export function useFuturesTradeConfig(symbol: string, enabled = true) {
     queryFn: () => futuresApi.getTradeConfig(symbolCode),
     staleTime: 5 * 60 * 1000,
     enabled: enabled && !!symbol,
+  });
+}
+
+export function useFuturesPositions(symbol: string, enabled = true) {
+  const symbolCode = symbolFormat.toApi(symbol);
+
+  return useQuery({
+    queryKey: futuresPositionQueryKeys.list(symbolCode),
+    queryFn: () => futuresApi.getPositions(symbolCode),
+    enabled: enabled && !!symbol,
+    staleTime: 10_000,
+  });
+}
+
+export function useFuturesOpenOrders(symbol: string, enabled = true) {
+  const symbolCode = symbolFormat.toApi(symbol);
+
+  return useQuery({
+    queryKey: futuresOrderQueryKeys.open(symbolCode),
+    queryFn: () => futuresApi.getOpenOrders(symbolCode),
+    enabled: enabled && !!symbol,
+    staleTime: 10_000,
+  });
+}
+
+export function useFuturesOrderHistory(symbol: string, enabled = true) {
+  const symbolCode = symbolFormat.toApi(symbol);
+  const params: FuturesOrderHistoryParams = { page: 1, pageSize: 10, symbolCode };
+
+  return useQuery({
+    queryKey: futuresOrderQueryKeys.history(params),
+    queryFn: () => futuresApi.getOrderHistory(params),
+    enabled: enabled && !!symbol,
+    staleTime: 10_000,
+  });
+}
+
+export function useFuturesOrderDetail(orderNo: string | null, enabled = true) {
+  return useQuery({
+    queryKey: futuresOrderQueryKeys.detail(orderNo ?? undefined),
+    queryFn: () => futuresApi.getOrderDetail(orderNo ?? ''),
+    enabled: enabled && !!orderNo,
+    staleTime: 30_000,
+  });
+}
+
+export function usePlaceFuturesOrder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: FuturesPlaceOrderPayload) => futuresApi.placeFuturesOrder(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: accountQueryKeys.root });
+      queryClient.invalidateQueries({ queryKey: futuresOrderQueryKeys.root });
+      queryClient.invalidateQueries({ queryKey: futuresPositionQueryKeys.root });
+      toast.success('合约下单成功');
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
   });
 }

@@ -24,9 +24,11 @@ const ACCOUNT_OPTIONS: Array<{ type: AccountType; label: string }> = [
 export function TransferPage({ onBack }: { onBack: () => void }) {
   const [searchParams] = useSearchParams();
   const initialFromAccountType = getInitialFromAccountType(searchParams.get('from'));
+  const initialToAccountType = getInitialToAccountType(searchParams.get('to'), initialFromAccountType);
+  const initialCoinCode = normalizeCoinParam(searchParams.get('coin'));
   const [fromAccountType, setFromAccountType] = useState<AccountType>(initialFromAccountType);
-  const [toAccountType, setToAccountType] = useState<AccountType>(() => getDefaultToAccountType(initialFromAccountType));
-  const [selectedCoinCode, setSelectedCoinCode] = useState('');
+  const [toAccountType, setToAccountType] = useState<AccountType>(initialToAccountType);
+  const [selectedCoinCode, setSelectedCoinCode] = useState(initialCoinCode);
   const [amount, setAmount] = useState('');
   const [accountPicker, setAccountPicker] = useState<'from' | 'to' | null>(null);
   const [coinPickerOpen, setCoinPickerOpen] = useState(false);
@@ -38,8 +40,9 @@ export function TransferPage({ onBack }: { onBack: () => void }) {
     [fromAssets],
   );
   const selectedAsset = useMemo(
-    () => availableAssets.find((asset) => asset.coinCode === selectedCoinCode) ?? availableAssets[0],
-    [availableAssets, selectedCoinCode],
+    () => fromAssets.find((asset) => asset.coinCode === selectedCoinCode)
+      ?? (selectedCoinCode ? createEmptyTransferAsset(selectedCoinCode, fromAccountType) : availableAssets[0]),
+    [availableAssets, fromAccountType, fromAssets, selectedCoinCode],
   );
   const normalizedCoinCode = selectedAsset?.coinCode ?? '';
   const isUnsupportedPair =
@@ -294,8 +297,35 @@ function getInitialFromAccountType(value: string | null): AccountType {
   return 'SPOT';
 }
 
+function getInitialToAccountType(value: string | null, fromAccountType: AccountType): AccountType {
+  if (value === 'FUND' || value === 'SPOT' || value === 'FUTURES') return value;
+  return getDefaultToAccountType(fromAccountType);
+}
+
 function getDefaultToAccountType(fromAccountType: AccountType): AccountType {
   return fromAccountType === 'FUND' ? 'SPOT' : 'FUND';
+}
+
+function normalizeCoinParam(value: string | null): string {
+  return value?.trim().toUpperCase() ?? '';
+}
+
+function createEmptyTransferAsset(coinCode: string, accountType: AccountType): AccountAsset {
+  return {
+    accountId: 0,
+    accountType,
+    accountName: getAccountLabel(accountType),
+    coinCode,
+    coinName: coinCode,
+    totalBalance: 0,
+    availableBalance: 0,
+    frozenBalance: 0,
+    marginBalance: 0,
+    unrealizedPnlBalance: 0,
+    pendingDeposit: 0,
+    pendingWithdraw: 0,
+    accountStatus: 0,
+  };
 }
 
 function formatNumber(value: number) {

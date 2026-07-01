@@ -125,13 +125,14 @@ function App() {
 
   const openDeposit = () => navigate('/deposit');
   const openWithdraw = () => navigate('/withdraw');
-  const openTransfer = (fromAccountType?: AccountType) => {
-    if (!fromAccountType) {
-      navigate('/transfer');
-      return;
-    }
+  const openTransfer = (fromAccountType?: AccountType, toAccountType?: AccountType, coinCode?: string) => {
+    const params = new URLSearchParams();
+    if (fromAccountType) params.set('from', fromAccountType);
+    if (toAccountType) params.set('to', toAccountType);
+    if (coinCode) params.set('coin', coinCode);
 
-    navigate(`/transfer?from=${encodeURIComponent(fromAccountType)}`);
+    const query = params.toString();
+    navigate(query ? `/transfer?${query}` : '/transfer');
   };
   const openTrade = (symbol?: string, mode?: 'spot' | 'contract') => {
     if (mode) {
@@ -184,6 +185,7 @@ function App() {
             showChart={showChart}
             setShowChart={setShowChart}
             openLeverage={() => setShowLeverage(true)}
+            openTransfer={openTransfer}
           />
         }
       />

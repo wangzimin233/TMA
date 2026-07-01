@@ -24,7 +24,7 @@ export function ProfilePage({
   openSettings: () => void;
   openDeposit: () => void;
   openWithdraw: () => void;
-  openTransfer: (fromAccountType?: AccountType) => void;
+  openTransfer: (fromAccountType?: AccountType, toAccountType?: AccountType, coinCode?: string) => void;
 }) {
   const userInfo = useAuthStore((state) => state.userInfo);
   const displayName = userInfo?.nickname || userInfo?.email || '交易用户';
@@ -117,7 +117,7 @@ function AccountAssetModule({
 }: {
   openDeposit: () => void;
   openWithdraw: () => void;
-  openTransfer: (fromAccountType?: AccountType) => void;
+  openTransfer: (fromAccountType?: AccountType, toAccountType?: AccountType, coinCode?: string) => void;
 }) {
   const activeTab = useProfileUiStore((state) => state.profileAssetTab);
   const setActiveTab = useProfileUiStore((state) => state.setProfileAssetTab);

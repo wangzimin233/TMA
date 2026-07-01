@@ -85,7 +85,6 @@ export function useApplyWithdraw() {
       queryClient.invalidateQueries({ queryKey: ['withdraw', 'orders', payload.coinCode] });
       queryClient.invalidateQueries({ queryKey: ['withdraw', 'orders', 'all'] });
       queryClient.invalidateQueries({ queryKey: accountQueryKeys.root });
-      queryClient.invalidateQueries({ queryKey: ['mock', 'assets'] });
     },
   });
 }

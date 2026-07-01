@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bell, Calculator, CandlestickChart, ChevronDown, Columns2, FileText, Info, Loader2, Minus, PanelBottom, PanelTop, Plus, Search, Star, WalletCards, X } from 'lucide-react';
+import { ArrowLeftRight, Bell, Calculator, CandlestickChart, ChevronDown, Columns2, FileText, Info, Loader2, Minus, PanelBottom, PanelTop, Plus, Search, Star, WalletCards, X } from 'lucide-react';
 import { CandlestickSeries, ColorType, createChart, type CandlestickData, type IChartApi, type ISeriesApi, type LogicalRange, type UTCTimestamp } from 'lightweight-charts';
 import { CoinDot } from '../../components/CoinDot';
 import { Drawer, DrawerClose, DrawerContent, DrawerTitle } from '../../components/ui/drawer';
@@ -12,14 +12,16 @@ import { useTradeStore } from '../../store/trade.store';
 import { useAuthStore } from '../../store/auth.store';
 import type { FuturesDepthLevel, FuturesMarkPrice, FuturesSummary, FuturesTrade, SpotDepthLevel, SpotKlineParams, SpotSummary, SpotTrade, TradeMode } from '../../types/app';
 import { useCancelSpotOrder, usePlaceSpotOrder, useSpotFavoriteStatus, useToggleSpotFavorite, useSpotSummary, useInfiniteSpotKlines, useSpotDepth, useSpotExchangeInfo, useSpotFavorites, useSpotMarketList, useSpotOpenOrders, useSpotOrderDetail, useSpotOrderHistory, useSpotTradeConfig, useSpotTrades } from '../../hooks/useSpotQueries';
-import { useFuturesDepth, useFuturesMarkPrice, useFuturesMarketList, useFuturesSummary, useFuturesTradeConfig, useFuturesTrades, useInfiniteFuturesKlines } from '../../hooks/useFuturesQueries';
+import { useFuturesDepth, useFuturesMarkPrice, useFuturesMarketList, useFuturesOpenOrders, useFuturesOrderDetail, useFuturesOrderHistory, useFuturesPositions, useFuturesSummary, useFuturesTradeConfig, useFuturesTrades, useInfiniteFuturesKlines, usePlaceFuturesOrder } from '../../hooks/useFuturesQueries';
 import { useAccountAssets } from '../../hooks/useAccountQueries';
 import { addDecimalStrings, divideDecimalStrings, floorDecimalAtZero, floorDecimalToStep, formatDecimalToPrecision, multiplyDecimalStrings, normalizeDecimalInput, subtractDecimalStrings } from '../../lib/decimal';
 import { buildSpotOrderPayload, getSpotOrderValidation, type SpotOrderBalance, type SpotOrderRule } from '../../lib/spot-order';
+import { buildFuturesOrderPayload, convertFuturesQuantityUnit, getCloseAvailableQty, getFuturesBaseQuantityFromUnit, getFuturesOrderValidation, type FuturesOrderBalance, type FuturesOrderDirection, type FuturesOrderPosition, type FuturesOrderRule, type FuturesQuantityUnit, type FuturesTimeInForce } from '../../lib/futures-order';
 import { formatFuturesFundingRate, formatFuturesFundingTime, formatNullableMarketPercent, formatNullableMarketPrice, formatNullableMarketVolume, getNullableChangeClass, isFiniteNumber } from '../../lib/futures-market';
 import { symbolFormat } from '../../lib/utils';
-import type { AccountAsset } from '../../api/account';
+import type { AccountAsset, AccountType } from '../../api/account';
 import type { SpotOrder, SpotTradeConfig } from '../../api/spot';
+import type { FuturesOrder, FuturesTradeConfig } from '../../api/futures';
 
 const KLINE_INTERVALS: SpotKlineParams['interval'][] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 const KLINE_PAGE_LIMIT = 500;
@@ -28,14 +30,22 @@ const marketPickerTabs = ['自选', '热门', '涨幅榜', '跌幅榜'] as const
 type OrderType = 'limit' | 'market';
 type TradeSide = 'buy' | 'sell';
 type ContractPositionMode = 'open' | 'close';
-type OrderBookTab = 'book' | 'trades';
 type DepthViewMode = 'both' | 'buy' | 'sell';
 type TradeContentTab = 'chart' | 'trades' | 'overview';
 type MarketPickerTab = (typeof marketPickerTabs)[number];
 type LimitLinkedField = 'quantity' | 'amount';
+const contractTimeInForceOptions: Array<{ value: FuturesTimeInForce; label: string; description: string }> = [
+  { value: 'GTC', label: 'GTC', description: '取消前有效' },
+  { value: 'IOC', label: 'IOC', description: '立即成交否则取消' },
+  { value: 'FOK', label: 'FOK', description: '全部成交否则取消' },
+];
 type PriceSelectionSignal = {
   price: string;
   nonce: number;
+};
+type ContractOrderBookLayout = {
+  positionMode: ContractPositionMode;
+  takeProfitStopLossEnabled: boolean;
 };
 type TradeTicker = {
   symbol: string;
@@ -66,9 +76,10 @@ type TradePageProps = {
   showChart: boolean;
   setShowChart: (value: boolean) => void;
   openLeverage: () => void;
+  openTransfer: (fromAccountType?: AccountType, toAccountType?: AccountType, coinCode?: string) => void;
 };
 
-export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage }: TradePageProps) {
+export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage, openTransfer }: TradePageProps) {
   const currentSymbol = useTradeStore((state) => state.currentSymbol);
   const setCurrentSymbol = useTradeStore((state) => state.setCurrentSymbol);
   const isLogin = useAuthStore((state) => state.isLogin);
@@ -138,73 +149,21 @@ export function TradePage({ mode, setMode, showChart, setShowChart, openLeverage
     });
   };
 
-  if (mode === 'spot') {
-    return (
-      <>
-        <SpotTradePage
-          mode={mode}
-          setMode={setMode}
-          symbol={currentSymbol}
-          ticker={ticker}
-          showChart={showChart}
-          setShowChart={setShowChart}
-          openMarketPicker={() => setShowMarketPicker(true)}
-          favoriteStatus={favoriteStatus}
-          onToggleFavorite={handleToggleFavorite}
-        />
-        <MarketPicker
-          open={showMarketPicker}
-          mode={mode}
-          currentSymbol={currentSymbol}
-          onOpenChange={setShowMarketPicker}
-          onSelect={selectSymbol}
-        />
-      </>
-    );
-  }
-
   return (
     <>
-      {showChart ? (
-        <ChartTradePage
-          mode={mode}
-          setMode={setMode}
-          symbol={currentSymbol}
-          ticker={ticker}
-          closeChart={() => setShowChart(false)}
-          openLeverage={openLeverage}
-          openMarketPicker={() => setShowMarketPicker(true)}
-          favoriteStatus={favoriteStatus}
-          onToggleFavorite={handleToggleFavorite}
-        />
-      ) : (
-        <section>
-          <TradeTop mode={mode} setMode={setMode} />
-          <div className="border-b border-line px-4 py-2.5">
-            <div className="flex items-center justify-between">
-              <button className="flex items-center gap-2 text-[0.95rem] font-semibold" onClick={() => setShowMarketPicker(true)}>
-                <CoinDot /> {currentSymbol} <ChevronDown className="size-4" />
-              </button>
-              <div className="flex items-center gap-3.5">
-                <button aria-label="合约自选暂未开放" disabled className="cursor-not-allowed opacity-45">
-                  <Star className="size-5 text-muted-foreground" />
-                </button>
-                <button aria-label="打开K线图" onClick={() => setShowChart(true)}>
-                  <CandlestickChart className="size-5 text-brand" />
-                </button>
-              </div>
-            </div>
-            <p className={`mt-2.5 font-mono text-[1.52rem] font-bold leading-none tabular-nums ${getChangeClass(ticker?.change)}`}>
-              {ticker ? (mode === 'contract' ? ticker.price : ticker.spotPrice) : '--'}
-            </p>
-            <p className="mt-1.5 font-mono text-[0.78rem] text-muted-foreground tabular-nums">
-              ≈{ticker?.fiat ?? '--'} <span className={getChangeClass(ticker?.change)}>{ticker?.changeText ?? '--'} {ticker?.delta ?? '--'}</span>
-            </p>
-            {mode === 'contract' && <ContractTickerMeta ticker={ticker} compact />}
-          </div>
-          <BinanceOrderPanel mode={mode} symbol={currentSymbol} ticker={ticker} openLeverage={openLeverage} />
-        </section>
-      )}
+      <SpotTradePage
+        mode={mode}
+        setMode={setMode}
+        symbol={currentSymbol}
+        ticker={ticker}
+        showChart={showChart}
+        setShowChart={setShowChart}
+        openLeverage={openLeverage}
+        openTransfer={openTransfer}
+        openMarketPicker={() => setShowMarketPicker(true)}
+        favoriteStatus={favoriteStatus}
+        onToggleFavorite={handleToggleFavorite}
+      />
       <MarketPicker
         open={showMarketPicker}
         mode={mode}
@@ -223,6 +182,8 @@ function SpotTradePage({
   ticker,
   showChart,
   setShowChart,
+  openLeverage,
+  openTransfer,
   openMarketPicker,
   favoriteStatus,
   onToggleFavorite,
@@ -233,13 +194,18 @@ function SpotTradePage({
   ticker?: TradeTicker;
   showChart: boolean;
   setShowChart: (value: boolean) => void;
+  openLeverage: () => void;
+  openTransfer: (fromAccountType?: AccountType, toAccountType?: AccountType, coinCode?: string) => void;
   openMarketPicker: () => void;
   favoriteStatus?: { symbolCode: string; favorited: boolean };
   onToggleFavorite: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<TradeContentTab>('chart');
+  const isContract = mode === 'contract';
   const base = ticker?.base ?? getBaseFromSymbol(symbol);
   const quote = ticker?.quote ?? getQuoteFromSymbol(symbol);
+  const latestPrice = isContract ? ticker?.price : ticker?.spotPrice;
+  const subtitleChange = isContract ? `${ticker?.changeText ?? '--'} ${ticker?.delta ?? '--'}` : ticker?.changeText ?? '--';
 
   const toggleChart = () => {
     setShowChart(!showChart);
@@ -256,7 +222,12 @@ function SpotTradePage({
             <ChevronDown className="size-4 shrink-0" />
           </button>
           <div className="flex shrink-0 items-center gap-3.5">
-            <button className="cursor-pointer" aria-label="收藏交易对" onClick={onToggleFavorite}>
+            <button
+              className={isContract ? 'cursor-not-allowed opacity-45' : 'cursor-pointer'}
+              aria-label={isContract ? '合约自选暂未开放' : '收藏交易对'}
+              disabled={isContract}
+              onClick={onToggleFavorite}
+            >
               <Star className={`size-5 ${favoriteStatus?.favorited ? 'fill-brand text-brand' : 'text-muted-foreground'}`} />
             </button>
             <button className="cursor-pointer" aria-label={showChart ? '隐藏图表区域' : '显示图表区域'} onClick={toggleChart}>
@@ -267,10 +238,10 @@ function SpotTradePage({
         <div className="mt-3 grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3">
           <div className="min-w-0">
             <p className={`truncate font-mono text-[1.38rem] font-bold leading-none tabular-nums ${getChangeClass(ticker?.change)}`}>
-              {ticker?.spotPrice ?? '--'}
+              {latestPrice ?? '--'}
             </p>
             <p className="mt-1.5 truncate font-mono text-[0.72rem] text-muted-foreground tabular-nums">
-              ≈{ticker?.fiat ?? '--'} <span className={getChangeClass(ticker?.change)}>{ticker?.changeText ?? '--'}</span>
+              ≈{ticker?.fiat ?? '--'} <span className={getChangeClass(ticker?.change)}>{subtitleChange}</span>
             </p>
           </div>
           <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 text-right text-[0.68rem] text-muted-foreground">
@@ -280,6 +251,7 @@ function SpotTradePage({
             <Stat label={`24h额(${quote})`} value={ticker?.turnover ?? '--'} />
           </div>
         </div>
+        {isContract && <ContractTickerMeta ticker={ticker} compact />}
       </div>
 
       {showChart && (
@@ -295,17 +267,17 @@ function SpotTradePage({
           {activeTab === 'chart' && (
             <>
               <KlineIntervalTabs />
-              <CandleChart mode="spot" />
+              <CandleChart mode={mode} />
             </>
           )}
-          {activeTab === 'trades' && <LatestTradesSection mode="spot" symbol={symbol} base={base} />}
+          {activeTab === 'trades' && <LatestTradesSection mode={mode} symbol={symbol} base={base} />}
           {activeTab === 'overview' && <CoinOverviewPanel />}
         </div>
       )}
 
-      <SpotTradingWorkspace symbol={symbol} base={base} quote={quote} ticker={ticker} />
+      <TradingWorkspace mode={mode} symbol={symbol} base={base} quote={quote} ticker={ticker} openLeverage={openLeverage} openTransfer={openTransfer} />
       <div className="px-4 pb-3">
-        <CurrentOrders symbol={symbol} />
+        <CurrentOrders mode={mode} symbol={symbol} />
       </div>
     </section>
   );
@@ -373,112 +345,6 @@ function TradeTop({ mode, setMode }: { mode: TradeMode; setMode: (mode: TradeMod
       </div>
       <Bell className="size-5 text-muted-foreground" />
     </header>
-  );
-}
-
-function ChartTradePage({
-  mode,
-  setMode,
-  symbol,
-  ticker,
-  closeChart,
-  openLeverage,
-  openMarketPicker,
-  favoriteStatus,
-  onToggleFavorite,
-}: {
-  mode: TradeMode;
-  setMode: (mode: TradeMode) => void;
-  symbol: string;
-  ticker?: TradeTicker;
-  closeChart: () => void;
-  openLeverage: () => void;
-  openMarketPicker: () => void;
-  favoriteStatus?: { symbolCode: string; favorited: boolean };
-  onToggleFavorite: () => void;
-}) {
-  const base = symbol.split('/')[0] ?? 'BTC';
-  const currentInterval = useTradeStore((state) => state.currentInterval);
-  const setCurrentInterval = useTradeStore((state) => state.setCurrentInterval);
-
-  return (
-    <section>
-      <TradeTop mode={mode} setMode={setMode} />
-      <div className="border-b border-line px-4 py-2.5">
-        <div className="flex items-center justify-between">
-          <button className="flex items-center gap-2 text-[1rem] font-semibold" onClick={openMarketPicker}>
-            <CoinDot /> {symbol} <ChevronDown className="size-4" />
-          </button>
-          <div className="flex items-center gap-3.5">
-            <button
-              aria-label={mode === 'contract' ? '合约自选暂未开放' : '收藏交易对'}
-              className={mode === 'contract' ? 'cursor-not-allowed opacity-45' : 'cursor-pointer'}
-              disabled={mode === 'contract'}
-              onClick={onToggleFavorite}
-            >
-              <Star className={`size-5 ${favoriteStatus?.favorited ? 'fill-brand text-brand' : 'text-muted-foreground'}`} />
-            </button>
-            <button aria-label={mode === 'contract' ? '调整杠杆' : '返回下单'} onClick={mode === 'contract' ? openLeverage : closeChart}>
-              <CandlestickChart className="size-5 text-brand" />
-            </button>
-          </div>
-        </div>
-        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
-          <div>
-            <p className={`font-mono text-[1.38rem] font-bold leading-none tabular-nums ${getChangeClass(ticker?.change)}`}>
-              {ticker ? (mode === 'contract' ? ticker.price : ticker.spotPrice) : '--'}
-            </p>
-            <p className="mt-1.5 font-mono text-[0.72rem] text-muted-foreground tabular-nums">
-              ≈{ticker?.fiat ?? '--'} <span className={getChangeClass(ticker?.change)}>{ticker?.changeText ?? '--'} {ticker?.delta ?? '--'}</span>
-            </p>
-            {mode === 'contract' && <ContractTickerMeta ticker={ticker} compact />}
-          </div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-right text-[0.68rem] text-muted-foreground">
-            <Stat label="24h最高" value={ticker?.high ?? '--'} />
-            <Stat label={`24h量(${base})`} value={ticker?.volume ?? '--'} />
-            <Stat label="24h最低" value={ticker?.low ?? '--'} />
-            <Stat label="24h额(USDT)" value={ticker?.turnover ?? '--'} />
-          </div>
-        </div>
-      </div>
-      <div className="border-b border-line">
-        <Tabs value="chart" className="min-w-0 gap-0">
-          <TabsList variant="line" className="no-scrollbar flex !h-10 w-full min-w-0 justify-start gap-8 overflow-x-auto whitespace-nowrap rounded-none px-4 py-0 text-[0.9rem] font-semibold leading-none">
-            <TabsTrigger
-              value="chart"
-              className="!h-10 flex-none shrink-0 rounded-none border-0 bg-transparent px-0 pb-1.5 pt-0 text-muted-foreground shadow-none after:!bottom-0 after:bg-warning data-[state=active]:bg-transparent data-[state=active]:text-brand dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-brand"
-            >
-              图表
-            </TabsTrigger>
-            <TabsTrigger
-              value="overview"
-              className="!h-10 flex-none shrink-0 rounded-none border-0 bg-transparent px-0 pb-1.5 pt-0 text-muted-foreground shadow-none after:!bottom-0 after:bg-warning data-[state=active]:bg-transparent data-[state=active]:text-brand dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-brand"
-            >
-              币种概况
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="no-scrollbar flex items-center gap-2 overflow-x-auto whitespace-nowrap bg-base2 px-4 py-2 text-[0.75rem] text-muted-foreground">
-          {KLINE_INTERVALS.map((item) => (
-            <button key={item} className={currentInterval === item ? 'shrink-0 rounded bg-soft2 px-2.5 py-1.5 text-ink' : 'shrink-0 px-2 py-1.5'} onClick={() => setCurrentInterval(item)}>
-              {item}
-            </button>
-          ))}
-        </div>
-      </div>
-      <CandleChart mode={mode} />
-      <div className="grid grid-cols-2 gap-2.5 px-4 py-3">
-        <button className="rounded bg-buy py-2.5 text-[0.9rem] font-semibold text-white" onClick={closeChart}>
-          买入
-        </button>
-        <button className="rounded border border-sell bg-soft2 py-2.5 text-[0.9rem] font-semibold text-sell" onClick={closeChart}>
-          卖出
-        </button>
-      </div>
-      <div className="px-4 pb-24">
-        <OrderBook mode={mode} base={base} ticker={ticker} />
-      </div>
-    </section>
   );
 }
 
@@ -674,53 +540,105 @@ function CandleChart({ mode }: { mode: TradeMode }) {
   );
 }
 
-function SpotTradingWorkspace({ symbol, base, quote, ticker }: { symbol: string; base: string; quote: string; ticker?: TradeTicker }) {
+function TradingWorkspace({
+  mode,
+  symbol,
+  base,
+  quote,
+  ticker,
+  openLeverage,
+  openTransfer,
+}: {
+  mode: TradeMode;
+  symbol: string;
+  base: string;
+  quote: string;
+  ticker?: TradeTicker;
+  openLeverage: () => void;
+  openTransfer: (fromAccountType?: AccountType, toAccountType?: AccountType, coinCode?: string) => void;
+}) {
   const [selectedPrice, setSelectedPrice] = useState<PriceSelectionSignal | null>(null);
   const [orderType, setOrderType] = useState<OrderType>('limit');
+  const [contractOrderBookLayout, setContractOrderBookLayout] = useState<ContractOrderBookLayout>({
+    positionMode: 'open',
+    takeProfitStopLossEnabled: false,
+  });
+  const orderBookKey = `${mode}:${symbol}:${orderType}:${contractOrderBookLayout.positionMode}:${contractOrderBookLayout.takeProfitStopLossEnabled ? 'tpsl' : 'plain'}`;
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,0.43fr)_minmax(0,0.57fr)] gap-2.5 border-b border-line px-3 py-3">
+    <div className="grid min-w-0 grid-cols-[minmax(0,0.43fr)_minmax(0,0.57fr)] items-start gap-2.5 border-b border-line px-3 py-3">
       <CompactOrderBook
+        key={orderBookKey}
+        mode={mode}
         symbol={symbol}
         base={base}
         quote={quote}
         ticker={ticker}
         orderType={orderType}
+        contractLayout={contractOrderBookLayout}
         onSelectPrice={(price) => setSelectedPrice({ price, nonce: Date.now() })}
       />
-      <SpotOrderForm
-        symbol={symbol}
-        base={base}
-        quote={quote}
-        ticker={ticker}
-        orderType={orderType}
-        setOrderType={setOrderType}
-        selectedPrice={selectedPrice}
-      />
+      <div className="min-w-0">
+        {mode === 'contract' ? (
+          <ContractOrderForm
+            symbol={symbol}
+            base={base}
+            quote={quote}
+            ticker={ticker}
+            orderType={orderType}
+            setOrderType={setOrderType}
+            selectedPrice={selectedPrice}
+            openLeverage={openLeverage}
+            openTransfer={openTransfer}
+            onOrderBookLayoutChange={setContractOrderBookLayout}
+          />
+        ) : (
+          <SpotOrderForm
+            symbol={symbol}
+            base={base}
+            quote={quote}
+            ticker={ticker}
+            orderType={orderType}
+            setOrderType={setOrderType}
+            selectedPrice={selectedPrice}
+          />
+        )}
+      </div>
     </div>
   );
 }
 
 function CompactOrderBook({
+  mode,
   symbol,
   base,
   quote,
   ticker,
   orderType,
+  contractLayout,
   onSelectPrice,
 }: {
+  mode: TradeMode;
   symbol: string;
   base: string;
   quote: string;
   ticker?: TradeTicker;
   orderType: OrderType;
+  contractLayout: ContractOrderBookLayout;
   onSelectPrice: (price: string) => void;
 }) {
   const [depthView, setDepthView] = useState<DepthViewMode>('both');
-  const { data: depth, isLoading } = useSpotDepth(symbol, 20);
-  const bothRowCount = orderType === 'market' ? 5 : 6;
-  const singleSideRowCount = orderType === 'market' ? 10 : 12;
-  const visibleRowCount = depthView === 'both' ? bothRowCount : singleSideRowCount;
+  const isContract = mode === 'contract';
+  const { data: spotDepth, isLoading: spotDepthLoading } = useSpotDepth(symbol, 20, !isContract);
+  const { data: futuresDepth, isLoading: futuresDepthLoading } = useFuturesDepth(symbol, 20, isContract);
+  const depth = isContract ? futuresDepth : spotDepth;
+  const isLoading = isContract ? futuresDepthLoading : spotDepthLoading;
+  const visibleRowCount = getCompactDepthDisplayRows({
+    depthView,
+    mode,
+    orderType,
+    contractLayout,
+  });
   const sellRows = (depth?.asks ?? []).slice(0, visibleRowCount).map(formatDepthRow);
   const buyRows = (depth?.bids ?? []).slice(0, visibleRowCount).map(formatDepthRow);
   const maxAmount = Math.max(0, ...sellRows.concat(buyRows).map((row) => row.quantity));
@@ -737,7 +655,7 @@ function CompactOrderBook({
         <span className="text-right">数量<br />({base})</span>
       </div>
       {depthView !== 'buy' && <DepthRows rows={sellRows} side="sell" maxAmount={maxAmount} isLoading={isLoading} onSelectPrice={onSelectPrice} compact />}
-      <CompactMarketPrice ticker={ticker} />
+      <CompactMarketPrice mode={mode} ticker={ticker} onSelectPrice={onSelectPrice} />
       {depthView !== 'sell' && <DepthRows rows={buyRows} side="buy" maxAmount={maxAmount} isLoading={isLoading} onSelectPrice={onSelectPrice} compact />}
       <div className="mt-2.5 flex items-center gap-1 font-mono text-[0.68rem] tabular-nums">
         <span className="text-buy">{buyPercent}%</span>
@@ -758,12 +676,24 @@ function CompactOrderBook({
   );
 }
 
-function CompactMarketPrice({ ticker }: { ticker?: TradeTicker }) {
+function CompactMarketPrice({ mode, ticker, onSelectPrice }: { mode: TradeMode; ticker?: TradeTicker; onSelectPrice?: (price: string) => void }) {
+  const price = mode === 'contract' ? ticker?.price : ticker?.spotPrice;
+  const selectable = Boolean(price && onSelectPrice);
+  const selectPrice = () => {
+    if (!price) return;
+    onSelectPrice?.(toDecimalInput(price));
+  };
+
   return (
-    <div className="my-2.5 text-center">
-      <p className={`font-mono text-[1.45rem] font-bold leading-none tabular-nums ${getChangeClass(ticker?.change)}`}>{ticker?.spotPrice ?? '--'}</p>
+    <button
+      className={`my-2.5 block w-full rounded-md text-center transition-colors ${selectable ? 'cursor-pointer hover:bg-white/[0.035] active:bg-white/[0.055]' : 'cursor-default'}`}
+      disabled={!selectable}
+      onClick={selectPrice}
+      type="button"
+    >
+      <p className={`font-mono text-[1.45rem] font-bold leading-none tabular-nums ${getChangeClass(ticker?.change)}`}>{price ?? '--'}</p>
       <p className="mt-1 font-mono text-[0.72rem] text-muted-foreground tabular-nums">≈ {ticker?.fiat ?? '--'}</p>
-    </div>
+    </button>
   );
 }
 
@@ -1094,6 +1024,34 @@ function getOrderTypeLabel(orderType: OrderType): string {
   return orderType === 'limit' ? '限价单' : '市价单';
 }
 
+function getCompactDepthDisplayRows({
+  depthView,
+  mode,
+  orderType,
+  contractLayout,
+}: {
+  depthView: DepthViewMode;
+  mode: TradeMode;
+  orderType: OrderType;
+  contractLayout: ContractOrderBookLayout;
+}): number {
+  const bothSideRows = mode === 'contract'
+    ? orderType === 'market' ? 9 : 10
+    : orderType === 'market' ? 5 : 6;
+  const tpslExtraRows = mode === 'contract'
+    && contractLayout.positionMode === 'open'
+    && contractLayout.takeProfitStopLossEnabled
+    ? 2
+    : 0;
+  const visibleRows = bothSideRows + tpslExtraRows;
+
+  if (depthView === 'both') {
+    return Math.min(mode === 'contract' ? 12 : 10, visibleRows);
+  }
+
+  return Math.min(20, visibleRows * 2);
+}
+
 function getSpotEstimatedValue({
   side,
   isLimitOrder,
@@ -1122,153 +1080,560 @@ function getSpotEstimatedValue({
   return `${multiplyDecimalStrings(marketPrice, quantity) || '0'} ${quote}`;
 }
 
-function BinanceOrderPanel({ mode, symbol, ticker, openLeverage }: { mode: TradeMode; symbol: string; ticker?: TradeTicker; openLeverage: () => void }) {
-  const base = symbol.split('/')[0] ?? 'BTC';
-  const isContract = mode === 'contract';
-  const { data: futuresTradeConfig } = useFuturesTradeConfig(symbol, isContract);
+function ContractOrderForm({
+  symbol,
+  base,
+  quote,
+  ticker,
+  orderType,
+  setOrderType,
+  selectedPrice,
+  openLeverage,
+  openTransfer,
+  onOrderBookLayoutChange,
+}: {
+  symbol: string;
+  base: string;
+  quote: string;
+  ticker?: TradeTicker;
+  orderType: OrderType;
+  setOrderType: (orderType: OrderType) => void;
+  selectedPrice: PriceSelectionSignal | null;
+  openLeverage: () => void;
+  openTransfer: (fromAccountType?: AccountType, toAccountType?: AccountType, coinCode?: string) => void;
+  onOrderBookLayoutChange: (layout: ContractOrderBookLayout) => void;
+}) {
+  const { data: futuresTradeConfig } = useFuturesTradeConfig(symbol, true);
   const futuresRule = futuresTradeConfig?.futuresRule;
-  const [orderType, setOrderType] = useState<OrderType>('limit');
   const [positionMode, setPositionMode] = useState<ContractPositionMode>('open');
+  const [price, setPrice] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [quantityUnit, setQuantityUnit] = useState<FuturesQuantityUnit>('base');
+  const [takeProfitStopLossEnabled, setTakeProfitStopLossEnabled] = useState(false);
+  const [timeInForce, setTimeInForce] = useState<FuturesTimeInForce>('GTC');
+  const [showTimeInForceDrawer, setShowTimeInForceDrawer] = useState(false);
+  const isAuthenticated = useAuthStore((state) => state.isLogin);
+  const { data: accountAssets = [] } = useAccountAssets('FUTURES', isAuthenticated);
+  const { data: futuresPositions = [] } = useFuturesPositions(symbol, isAuthenticated);
+  const placeOrder = usePlaceFuturesOrder();
   const isLimitOrder = orderType === 'limit';
-  const marketPlaceholder = positionMode === 'open' ? '最优追价开仓' : '最优追价平仓';
-  const leftAction = isContract ? (positionMode === 'open' ? '买入开多' : '平空') : `买入 ${base}`;
-  const rightAction = isContract ? (positionMode === 'open' ? '卖出开空' : '平多') : `卖出 ${base}`;
+  const marketPlaceholder = positionMode === 'open' ? '市价开仓' : '市价平仓';
   const contractMetricLabel = positionMode === 'open' ? '可开' : '可平';
-  const showContractLimitMeta = isContract && isLimitOrder;
-  const leverageText = futuresRule?.defaultLeverage ? `${futuresRule.defaultLeverage}x` : '10x';
-  const marginModeText = futuresRule?.marginCoinCode ? `${futuresRule.marginCoinCode}保证金` : '全仓';
+  const selectedLeverage = useTradeStore((state) => state.selectedLeverage);
+  const setSelectedLeverage = useTradeStore((state) => state.setSelectedLeverage);
+  const effectiveLeverage = selectedLeverage || futuresRule?.defaultLeverage || 10;
+  const leverageText = `${effectiveLeverage}x`;
+  const marginModeLabel = '逐仓';
+  const positionModeLabel = '双向';
+  const marginCoin = futuresRule?.marginCoinCode ?? quote;
+  const primaryAction = positionMode === 'open'
+    ? { label: '开多', helper: '看涨', className: 'bg-buy', direction: 'long' as const }
+    : { label: '平多', helper: '减多', className: 'bg-sell', direction: 'long' as const };
+  const secondaryAction = positionMode === 'open'
+    ? { label: '开空', helper: '看跌', className: 'bg-sell', direction: 'short' as const }
+    : { label: '平空', helper: '减空', className: 'bg-buy', direction: 'short' as const };
+  const pricePrecision = getInputPrecision(futuresRule?.pricePrecision, toRuleDecimal(futuresRule?.tickSize));
+  const quantityPrecision = getInputPrecision(futuresRule?.qtyPrecision, toRuleDecimal(futuresRule?.stepSize));
+  const amountPrecision = getInputPrecision(futuresRule?.amountPrecision);
+  const quantityStep = toRuleDecimal(futuresRule?.stepSize);
+  const marketPrice = toDecimalInput(ticker?.price ?? '');
+  const referencePrice = isLimitOrder ? price : marketPrice;
+  const orderQuantity = getFuturesBaseQuantityFromUnit({
+    quantity,
+    unit: quantityUnit,
+    referencePrice,
+    stepSize: quantityStep,
+  });
+  const quantityDisplayPrecision = quantityUnit === 'base' ? quantityPrecision : amountPrecision;
+  const futuresBalance = useMemo(
+    () => getFuturesBalance(accountAssets, marginCoin),
+    [accountAssets, marginCoin],
+  );
+  const orderRule = useMemo(
+    () => getFuturesOrderRule(futuresTradeConfig),
+    [futuresTradeConfig],
+  );
+  const orderPositions = useMemo(
+    () => futuresPositions.map((position) => ({
+      positionSide: position.positionSide,
+      availableQty: toRuleDecimal(position.availableQty ?? undefined) || '0',
+    })),
+    [futuresPositions],
+  );
+  const getValidation = (direction: FuturesOrderDirection) => getFuturesOrderValidation({
+    rule: orderRule,
+    balance: futuresBalance,
+    positions: orderPositions,
+    positionMode,
+    direction,
+    orderType,
+    price,
+    quantity: orderQuantity,
+    marketPrice,
+    quote: marginCoin,
+    base,
+    leverage: effectiveLeverage,
+  });
+  const primaryValidation = getValidation(primaryAction.direction);
+  const secondaryValidation = getValidation(secondaryAction.direction);
+  const maxOpenQuantity = normalizeQuantityToDisplayStep(getFuturesMaxOpenQuantity(futuresBalance?.availableBalance ?? '0', referencePrice, effectiveLeverage), quantityStep);
+  const primaryPreviewQuantity = positionMode === 'open'
+    ? maxOpenQuantity
+    : getCloseAvailableQty(orderPositions, primaryAction.direction);
+  const secondaryPreviewQuantity = positionMode === 'open'
+    ? maxOpenQuantity
+    : getCloseAvailableQty(orderPositions, secondaryAction.direction);
+  const submitReason = !isAuthenticated
+    ? '请先登录'
+    : primaryValidation.reason || secondaryValidation.reason;
+  const isSubmitting = placeOrder.isPending;
+
+  useEffect(() => {
+    onOrderBookLayoutChange({
+      positionMode,
+      takeProfitStopLossEnabled: positionMode === 'open' && takeProfitStopLossEnabled,
+    });
+  }, [onOrderBookLayoutChange, positionMode, takeProfitStopLossEnabled]);
 
   useEffect(() => {
     setOrderType('limit');
     setPositionMode('open');
-  }, [mode]);
+    setPrice('');
+    setQuantity('');
+    setQuantityUnit('base');
+    setTakeProfitStopLossEnabled(false);
+    setTimeInForce('GTC');
+    setShowTimeInForceDrawer(false);
+  }, [setOrderType, symbol]);
+
+  useEffect(() => {
+    setQuantity('');
+    setQuantityUnit('base');
+  }, [positionMode, orderType]);
+
+  useEffect(() => {
+    if (!price && isLimitOrder) {
+      setPrice(toDecimalInput(ticker?.price ?? ''));
+    }
+  }, [isLimitOrder, price, ticker?.price]);
+
+  useEffect(() => {
+    if (!selectedPrice || !isLimitOrder) return;
+
+    setPrice(normalizeDecimalInput(selectedPrice.price, pricePrecision));
+  }, [selectedPrice?.nonce, isLimitOrder, pricePrecision]);
+
+  const normalizeQuantityToStep = (nextQuantity: string) => {
+    if (!quantityStep) return nextQuantity;
+    return floorDecimalToStep(nextQuantity, quantityStep);
+  };
+  const formatDisplayQuantity = (nextQuantity: string, nextUnit = quantityUnit) => {
+    return normalizeDecimalInput(nextUnit === 'base' ? normalizeQuantityToStep(nextQuantity) : nextQuantity, nextUnit === 'base' ? quantityPrecision : amountPrecision);
+  };
+  const updateContractPriceByStep = (direction: 'down' | 'up') => {
+    const priceStep = toRuleDecimal(futuresRule?.tickSize) || '0.01';
+    const currentPrice = price || '0';
+    const nextPrice = direction === 'up'
+      ? addDecimalStrings(currentPrice, priceStep)
+      : floorDecimalAtZero(subtractDecimalStrings(currentPrice, priceStep));
+
+    setPrice(normalizeDecimalInput(nextPrice, pricePrecision));
+  };
+  const updateContractQuantityByStep = (direction: 'down' | 'up') => {
+    const step = quantityUnit === 'base' ? quantityStep || '0.001' : '1';
+    const currentQuantity = quantity || '0';
+    const nextQuantity = direction === 'up'
+      ? addDecimalStrings(currentQuantity, step)
+      : floorDecimalAtZero(subtractDecimalStrings(currentQuantity, step));
+
+    setQuantity(formatDisplayQuantity(nextQuantity));
+  };
+
+  const applyBalancePercent = (percent: number) => {
+    const referencePrice = isLimitOrder ? price : marketPrice;
+    const rawQuantity = positionMode === 'open'
+      ? getFuturesMaxOpenQuantity(futuresBalance?.availableBalance ?? '0', referencePrice, effectiveLeverage)
+      : getCloseAvailableQty(orderPositions, primaryAction.direction);
+    const percentQuantity = divideDecimalStrings(multiplyDecimalStrings(rawQuantity, String(percent)), '100', 18);
+
+    if (quantityUnit === 'quote') {
+      setQuantity(formatDisplayQuantity(multiplyDecimalStrings(percentQuantity, referencePrice), 'quote'));
+      return;
+    }
+
+    setQuantity(formatDisplayQuantity(percentQuantity, 'base'));
+  };
+
+  const changeQuantityUnit = (nextUnit: FuturesQuantityUnit) => {
+    const nextQuantity = convertFuturesQuantityUnit({
+      value: quantity,
+      fromUnit: quantityUnit,
+      toUnit: nextUnit,
+      referencePrice,
+      stepSize: quantityStep,
+    });
+
+    if (nextQuantity === null) return;
+
+    setQuantityUnit(nextUnit);
+    setQuantity(formatDisplayQuantity(nextQuantity, nextUnit));
+  };
+
+  const submitFuturesOrder = (direction: FuturesOrderDirection, validation = getValidation(direction)) => {
+    if (!isAuthenticated || !validation.canSubmit || isSubmitting) return;
+
+    placeOrder.mutate(buildFuturesOrderPayload({
+      symbolCode: symbolFormat.toApi(symbol),
+      positionMode,
+      direction,
+      orderType,
+      price,
+      quantity: orderQuantity,
+      leverage: effectiveLeverage,
+      timeInForce,
+    }), {
+      onSuccess: () => {
+        setQuantity('');
+      },
+    });
+  };
+  const openLeverageModal = () => {
+    if (!selectedLeverage) {
+      setSelectedLeverage(effectiveLeverage);
+    }
+    openLeverage();
+  };
 
   return (
-    <div className="px-4 py-3.5">
-      {isContract && (
-        <Tabs value={positionMode} onValueChange={(value) => setPositionMode(value as ContractPositionMode)}>
-          <TabsList className="mb-3 grid h-11 w-full grid-cols-2 items-stretch gap-0 overflow-hidden rounded-md bg-soft p-0">
-            <TabsTrigger
-              value="open"
-              className="h-full min-h-0 rounded-none border-0 py-0 text-[0.9rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-buy data-[state=active]:text-white dark:data-[state=active]:bg-buy dark:data-[state=active]:text-white"
-            >
-              开仓
-            </TabsTrigger>
-            <TabsTrigger
-              value="close"
-              className="h-full min-h-0 rounded-none border-0 py-0 text-[0.9rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-sell data-[state=active]:text-white dark:data-[state=active]:bg-sell dark:data-[state=active]:text-white"
-            >
-              平仓
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
+    <div className="min-w-0">
+      <Tabs value={positionMode} onValueChange={(value) => setPositionMode(value as ContractPositionMode)}>
+        <TabsList className="mb-1.5 grid h-7 w-full grid-cols-2 items-stretch gap-0 overflow-hidden rounded-md bg-base2 p-0">
+          <TabsTrigger
+            value="open"
+            className="h-full min-h-0 rounded-none border-0 py-0 text-[0.78rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-buy data-[state=active]:text-white dark:data-[state=active]:bg-buy dark:data-[state=active]:text-white"
+          >
+            开仓
+          </TabsTrigger>
+          <TabsTrigger
+            value="close"
+            className="h-full min-h-0 rounded-none border-0 py-0 text-[0.78rem] font-semibold text-muted-foreground shadow-none after:hidden data-[state=active]:bg-sell data-[state=active]:text-white dark:data-[state=active]:bg-sell dark:data-[state=active]:text-white"
+          >
+            平仓
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-      <div className="mb-3.5 flex min-w-0 items-center justify-between gap-3">
-        <Tabs className="min-w-0 flex-1" value={orderType} onValueChange={(value) => setOrderType(value as OrderType)}>
-          <TabsList variant="line" className="no-scrollbar flex h-auto min-w-0 justify-start gap-8 overflow-x-auto whitespace-nowrap p-0 text-[1rem] font-semibold">
-            <TabsTrigger
-              value="limit"
-              className="h-auto shrink-0 rounded-none px-0 pb-2 text-muted-foreground after:bg-warning data-[state=active]:text-ink data-[state=active]:after:opacity-100"
-            >
-              限价
-            </TabsTrigger>
-            <TabsTrigger
-              value="market"
-              className="h-auto shrink-0 rounded-none px-0 pb-2 text-muted-foreground after:bg-warning data-[state=active]:text-ink data-[state=active]:after:opacity-100"
-            >
-              市价
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <Info className="size-5 shrink-0 text-muted-foreground" />
+      <div className="mb-1.5 grid grid-cols-3 gap-1">
+        <button className="h-7 rounded-md bg-base2 text-[0.58rem] font-semibold text-muted-foreground cursor-not-allowed" disabled type="button">
+          <span className="inline-block scale-[0.86] leading-none">{marginModeLabel}</span>
+        </button>
+        <button className="h-7 rounded-md bg-base2 text-[0.62rem] font-semibold text-brand transition hover:bg-soft cursor-pointer" onClick={openLeverageModal} type="button">
+          <span className="inline-block scale-[0.9] leading-none">{leverageText}</span>
+        </button>
+        <button className="h-7 rounded-md bg-base2 text-[0.58rem] font-semibold text-muted-foreground cursor-not-allowed" disabled type="button">
+          <span className="inline-block scale-[0.86] leading-none">{positionModeLabel}</span>
+        </button>
       </div>
 
-      <div className="mb-3.5 flex items-center justify-between text-[0.92rem] text-muted-foreground">
-        <span>可用 -- USDT</span>
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="mb-1.5 flex h-7 w-full items-center justify-between rounded-md bg-base2 px-2.5 text-[0.66rem] font-semibold text-ink transition-colors hover:bg-soft cursor-pointer" type="button">
+            <span className="inline-block scale-[0.9] leading-none">{getOrderTypeLabel(orderType)}</span>
+            <ChevronDown className="size-3.5 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="border border-line bg-panel text-ink">
+          <DropdownMenuItem className="cursor-pointer text-[0.78rem]" onSelect={() => setOrderType('limit')}>
+            限价单
+          </DropdownMenuItem>
+          <DropdownMenuItem className="cursor-pointer text-[0.78rem]" onSelect={() => setOrderType('market')}>
+            市价单
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {isLimitOrder ? (
-        <>
-          <div className="mb-2.5 flex items-end justify-between">
-            <span className="text-[0.82rem] text-muted-foreground">委托价格</span>
-            <Calculator className="size-4.5 text-muted-foreground" />
-          </div>
-
-          <div className="mb-3">
-            <TradeInput value={ticker?.price ?? ''} suffix="USDT" compact emphasis />
-          </div>
-        </>
+        <TradeInput
+          value={price}
+          onValueChange={(value) => setPrice(normalizeDecimalInput(value, pricePrecision))}
+          placeholder="价格"
+          suffix={quote}
+          onStepDown={() => updateContractPriceByStep('down')}
+          onStepUp={() => updateContractPriceByStep('up')}
+          dense
+          emphasis
+          feedbackKey={selectedPrice?.nonce}
+          ariaLabel={`委托价格(${quote})`}
+        />
       ) : (
-        <div className="mb-3 flex h-[3.25rem] items-center rounded-lg border border-transparent bg-soft px-4 text-[0.86rem] font-semibold text-muted-foreground/70">
-          {isContract ? marketPlaceholder : '按市场最优价格成交'}
+        <div className="flex h-[2.75rem] items-center rounded-lg border border-transparent bg-soft px-3 text-[0.76rem] font-semibold text-muted-foreground/70">
+          {marketPlaceholder}
         </div>
       )}
 
-      <label className="mb-2 block text-[0.82rem] text-muted-foreground">数量</label>
-      <TradeInput placeholder="" suffix={base} dropdown compact />
-      <PercentRail />
-
-      {showContractLimitMeta && (
-        <div className="mb-3.5 flex items-center justify-between border-t border-line pt-3">
-          <button className="flex items-center gap-1 text-[0.84rem] font-semibold text-muted-foreground">
-            生效时间 <span className="text-ink">GTC</span> <ChevronDown className="size-4" />
-          </button>
-          <button className="rounded border border-line px-3 py-1.5 text-[0.8rem] text-brand" onClick={openLeverage}>
-            {marginModeText} | {leverageText}
-          </button>
-        </div>
-      )}
-
-      {isContract && (
-        <div className={`${showContractLimitMeta ? 'mb-3.5' : 'my-3.5 border-t border-line pt-3'} space-y-3`}>
-          <CheckRow label="止盈/止损" />
-          <CheckRow label={positionMode === 'open' ? '只减仓' : '仅平仓'} />
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2.5">
-        <button
-          className={`rounded-md bg-buy py-3 text-[0.95rem] font-semibold text-white transition active:brightness-90 ${isContract ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-          disabled={isContract}
-          type="button"
-        >
-          {leftAction}
-        </button>
-        <button
-          className={`rounded-md bg-sell py-3 text-[0.95rem] font-semibold text-white transition active:brightness-90 ${isContract ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-          disabled={isContract}
-          type="button"
-        >
-          {rightAction}
-        </button>
+      <label className="mb-1 mt-1.5 block text-[0.64rem] text-muted-foreground">数量</label>
+      <TradeInput
+        value={quantity}
+        onValueChange={(value) => setQuantity(normalizeDecimalInput(value, quantityDisplayPrecision))}
+        placeholder="数量"
+        suffix={quantityUnit === 'base' ? base : marginCoin}
+        suffixNode={
+          <ContractQuantityUnitMenu
+            base={base}
+            quote={marginCoin}
+            selected={quantityUnit}
+            onSelect={changeQuantityUnit}
+          />
+        }
+        onStepDown={() => updateContractQuantityByStep('down')}
+        onStepUp={() => updateContractQuantityByStep('up')}
+        dense
+        ariaLabel={`合约数量(${quantityUnit === 'base' ? base : marginCoin})`}
+      />
+      <div className="pt-1.5">
+        <PercentRail compact resetKey={`${symbol}:${positionMode}:${orderType}:${quantityUnit}`} onPercentChange={applyBalancePercent} />
       </div>
 
-      {isContract ? (
-        <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[0.78rem]">
-          {positionMode === 'open' && (
-            <>
-              <Metric label="强平价格" value="-- USDT" />
-              <Metric label="强平价格" value="-- USDT" />
-              <Metric label="保证金" value="0.00 USDT" />
-              <Metric label="保证金" value="0.00 USDT" />
-            </>
+      <div className="mb-1.5 flex min-w-0 items-center justify-between gap-2 text-[0.64rem] text-muted-foreground">
+        <span>可用</span>
+        <span className="flex min-w-0 items-center gap-1 font-mono text-ink tabular-nums">
+          {formatDecimalDisplay(futuresBalance?.availableBalance)} {marginCoin}
+          <button
+            aria-label={`划转${marginCoin}到合约账户`}
+            className="grid size-5 shrink-0 place-items-center rounded-sm text-brand transition hover:bg-brand/10 active:bg-brand/15 cursor-pointer"
+            onClick={() => openTransfer('FUND', 'FUTURES', marginCoin)}
+            type="button"
+          >
+            <ArrowLeftRight className="size-3.5" />
+          </button>
+        </span>
+      </div>
+
+      {positionMode === 'open' && (
+        <div className="my-2 border-t border-line pt-2">
+          <CheckRow
+            checked={takeProfitStopLossEnabled}
+            compact
+            label="止盈/止损"
+            onCheckedChange={setTakeProfitStopLossEnabled}
+          />
+          {takeProfitStopLossEnabled && (
+            <div className="mt-1.5 space-y-1.5">
+              <ContractTriggerPriceInput label="止盈" quote={quote} />
+              <ContractTriggerPriceInput label="止损" quote={quote} />
+            </div>
           )}
-          <Metric label={contractMetricLabel} value={`0.000 ${base}`} />
-          <Metric label={contractMetricLabel} value={`0.000 ${base}`} />
-          <Metric label="最小名义额" value={`${formatDecimalDisplay(futuresRule?.minNotional)} USDT`} />
-          <Metric label="步长" value={formatDecimalDisplay(futuresRule?.stepSize)} />
-        </div>
-      ) : (
-        <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-1 text-[0.78rem]">
-          <Metric label="可用" value="-- USDT" />
-          <Metric label="可用" value={`-- ${base}`} />
-          <Metric label="预计买入" value={`0.000 ${base}`} />
-          <Metric label="预计卖出" value="0.00 USDT" />
         </div>
       )}
 
-      <CurrentOrders />
+      {isLimitOrder && (
+        <button
+          className="mb-1.5 flex items-center gap-0.5 text-xs font-semibold leading-none text-muted-foreground transition-colors hover:text-ink cursor-pointer"
+          onClick={() => setShowTimeInForceDrawer(true)}
+          type="button"
+        >
+          <span className="text-xs leading-none">{timeInForce}</span>
+          <ChevronDown className="size-2.5" />
+        </button>
+      )}
+
+      <ContractTimeInForceDrawer
+        open={showTimeInForceDrawer}
+        selected={timeInForce}
+        onOpenChange={setShowTimeInForceDrawer}
+        onSelect={(nextValue) => {
+          setTimeInForce(nextValue);
+          setShowTimeInForceDrawer(false);
+        }}
+      />
+
+      <div className="space-y-1.5">
+        <ContractActionPreview
+          base={base}
+          label={contractMetricLabel}
+          marginValue={primaryValidation.requiredMargin}
+          positionMode={positionMode}
+          quantityValue={primaryPreviewQuantity}
+          quote={marginCoin}
+        />
+        <button
+          className={`flex h-9 w-full items-center justify-center gap-2.5 rounded-md text-[0.84rem] font-semibold text-white transition active:brightness-90 ${primaryAction.className} ${!isAuthenticated || !primaryValidation.canSubmit || isSubmitting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+          disabled={!isAuthenticated || !primaryValidation.canSubmit || isSubmitting}
+          onClick={() => submitFuturesOrder(primaryAction.direction, primaryValidation)}
+          type="button"
+        >
+          {isSubmitting && <Loader2 className="size-3.5 animate-spin" />}
+          <span>{isSubmitting ? '提交中' : primaryAction.label}</span>
+          <span className="text-[0.62rem] font-medium opacity-85">{primaryAction.helper}</span>
+        </button>
+        <ContractActionPreview
+          base={base}
+          label={contractMetricLabel}
+          marginValue={secondaryValidation.requiredMargin}
+          positionMode={positionMode}
+          quantityValue={secondaryPreviewQuantity}
+          quote={marginCoin}
+        />
+        <button
+          className={`flex h-9 w-full items-center justify-center gap-2.5 rounded-md text-[0.84rem] font-semibold text-white transition active:brightness-90 ${secondaryAction.className} ${!isAuthenticated || !secondaryValidation.canSubmit || isSubmitting ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+          disabled={!isAuthenticated || !secondaryValidation.canSubmit || isSubmitting}
+          onClick={() => submitFuturesOrder(secondaryAction.direction, secondaryValidation)}
+          type="button"
+        >
+          {isSubmitting && <Loader2 className="size-3.5 animate-spin" />}
+          <span>{isSubmitting ? '提交中' : secondaryAction.label}</span>
+          <span className="text-[0.62rem] font-medium opacity-85">{secondaryAction.helper}</span>
+        </button>
+      </div>
+      {submitReason && (
+        <p className="mt-2 min-h-4 truncate text-[0.64rem] leading-none text-warning">
+          {submitReason}
+        </p>
+      )}
+
+      <div className="mt-2 space-y-0.5 text-[0.64rem] leading-tight">
+        <MetricLine label="最小名义额" value={`${formatDecimalDisplay(futuresRule?.minNotional)} ${quote}`} />
+        <MetricLine label="步长" value={formatDecimalDisplay(futuresRule?.stepSize)} />
+      </div>
+    </div>
+  );
+}
+
+function ContractQuantityUnitMenu({
+  base,
+  quote,
+  selected,
+  onSelect,
+}: {
+  base: string;
+  quote: string;
+  selected: FuturesQuantityUnit;
+  onSelect: (unit: FuturesQuantityUnit) => void;
+}) {
+  const label = selected === 'base' ? base : quote;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          aria-label="切换合约数量单位"
+          className="flex min-w-[3.25rem] shrink-0 cursor-pointer items-center justify-end gap-1 rounded-sm px-1 text-[0.84rem] font-semibold text-ink transition-colors hover:bg-soft"
+          type="button"
+        >
+          <span className="max-w-[3.7rem] truncate">{label}</span>
+          <ChevronDown className="size-3.5 text-muted-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[6.5rem] border border-line bg-panel text-ink">
+        {[
+          { value: 'base' as const, label: base },
+          { value: 'quote' as const, label: quote },
+        ].map((option) => (
+          <DropdownMenuItem
+            key={option.value}
+            className={`cursor-pointer text-[0.78rem] ${selected === option.value ? 'bg-base2 text-brand' : ''}`}
+            onSelect={() => onSelect(option.value)}
+          >
+            {option.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function ContractTimeInForceDrawer({
+  open,
+  selected,
+  onOpenChange,
+  onSelect,
+}: {
+  open: boolean;
+  selected: FuturesTimeInForce;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (value: FuturesTimeInForce) => void;
+}) {
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange} direction="bottom">
+      <DrawerContent className="mx-auto max-h-[78vh] w-full max-w-[430px] border-line bg-panel px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-ink">
+        <div className="pt-5">
+          <DrawerTitle className="text-left text-[1.05rem] font-semibold text-ink">订单时效</DrawerTitle>
+        </div>
+        <div className="mt-5 space-y-3">
+          {contractTimeInForceOptions.map((option) => {
+            const isSelected = selected === option.value;
+
+            return (
+              <button
+                key={option.value}
+                className={`w-full cursor-pointer rounded-lg border px-4 py-3.5 text-left transition-colors active:bg-soft ${
+                  isSelected
+                    ? 'border-ink bg-base2 text-ink'
+                    : 'border-line bg-base2/45 text-ink hover:border-ink/60 hover:bg-base2'
+                }`}
+                onClick={() => onSelect(option.value)}
+                type="button"
+              >
+                <span className="block text-[0.92rem] font-semibold leading-none">{option.label}</span>
+                <span className="mt-2 block text-[0.74rem] leading-none text-muted-foreground">{option.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      </DrawerContent>
+    </Drawer>
+  );
+}
+
+function ContractTriggerPriceInput({ label, quote }: { label: string; quote: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[0.62rem] text-muted-foreground">
+        <span>{label}</span>
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-0.5 cursor-pointer" type="button">
+            高级 <ChevronDown className="size-3" />
+          </button>
+          <button className="flex items-center gap-0.5 cursor-pointer" type="button">
+            最新 <ChevronDown className="size-3" />
+          </button>
+        </div>
+      </div>
+      <div className="flex h-8 min-w-0 items-center rounded-md border border-line bg-base2 px-2.5 text-[0.72rem] text-muted-foreground">
+        <span className="min-w-0 flex-1 text-center font-semibold">价格</span>
+        <span className="border-l border-line pl-2 font-semibold text-ink">{quote}</span>
+      </div>
+    </div>
+  );
+}
+
+function ContractActionPreview({
+  base,
+  label,
+  marginValue,
+  positionMode,
+  quantityValue,
+  quote,
+}: {
+  base: string;
+  label: string;
+  marginValue?: string;
+  positionMode: ContractPositionMode;
+  quantityValue?: string;
+  quote: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-start justify-between gap-2 text-[0.64rem] leading-tight text-muted-foreground">
+      <span>{label}</span>
+      <span className="min-w-0 text-right font-mono text-[0.68rem] text-ink tabular-nums">
+        {formatDecimalDisplay(quantityValue)} {base}
+        {positionMode === 'open' && (
+          <>
+            <br />
+            <span className="text-[0.62rem] text-muted-foreground">保证金</span> {formatDecimalDisplay(marginValue)} {quote}
+          </>
+        )}
+      </span>
     </div>
   );
 }
@@ -1277,6 +1642,7 @@ function TradeInput({
   value = '',
   placeholder,
   suffix,
+  suffixNode,
   onValueChange,
   onStepDown,
   onStepUp,
@@ -1294,6 +1660,7 @@ function TradeInput({
   value?: string;
   placeholder?: string;
   suffix: string;
+  suffixNode?: ReactNode;
   onValueChange?: (value: string) => void;
   onStepDown?: () => void;
   onStepUp?: () => void;
@@ -1308,7 +1675,7 @@ function TradeInput({
   feedbackKey?: number;
   ariaLabel?: string;
 }) {
-  const heightClass = dense ? 'h-[2.75rem]' : compact ? 'h-[3.25rem]' : 'h-[3.95rem]';
+  const heightClass = dense ? 'h-[2.95rem]' : compact ? 'h-[3.25rem]' : 'h-[3.95rem]';
   const inputSizeClass = dense
     ? `${emphasis ? 'text-[1rem]' : 'text-[0.94rem]'} font-semibold`
     : compact
@@ -1316,9 +1683,9 @@ function TradeInput({
       : large
         ? 'text-[1.35rem] font-semibold'
         : 'text-[1rem]';
-  const suffixSizeClass = dense ? 'text-[0.78rem]' : compact ? 'text-[0.84rem]' : 'text-[0.92rem]';
+  const suffixSizeClass = dense ? 'text-[0.84rem]' : compact ? 'text-[0.84rem]' : 'text-[0.92rem]';
   const hasSteppers = Boolean(onStepDown || onStepUp);
-  const stepButtonClass = `grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors ${
+  const stepButtonClass = `${dense ? 'grid h-full w-7 place-items-center text-[1.22rem]' : 'grid size-6 place-items-center rounded-md'} shrink-0 text-muted-foreground transition-colors ${
     stepDisabled || disabled ? 'opacity-45' : 'cursor-pointer hover:bg-soft2 hover:text-ink active:bg-line/80'
   }`;
   const stepTarget = ariaLabel ?? suffix;
@@ -1326,7 +1693,7 @@ function TradeInput({
   return (
     <div
       key={feedbackKey ?? 'stable-input-shell'}
-      className={`flex ${heightClass} min-w-0 items-center gap-2 rounded-lg border px-2.5 transition-colors duration-200 focus-within:border-muted-foreground/70 ${
+      className={`flex ${heightClass} min-w-0 items-center ${dense && hasSteppers ? 'gap-2 rounded-lg px-2' : 'gap-2 rounded-lg px-2.5'} border transition-colors duration-200 focus-within:border-muted-foreground/70 ${
         feedbackKey ? 'price-fill-pulse border-line bg-base2' : 'border-line bg-base2'
       }`}
     >
@@ -1338,7 +1705,7 @@ function TradeInput({
           onClick={onStepDown}
           type="button"
         >
-          <Minus className="size-3.5" />
+          {dense ? '−' : <Minus className="size-3.5" />}
         </button>
       )}
       <Input
@@ -1351,10 +1718,12 @@ function TradeInput({
         disabled={disabled}
         onChange={(event) => onValueChange?.(event.target.value)}
       />
-      <span className={`flex items-center gap-1 font-semibold text-ink ${suffixSizeClass}`}>
-        {suffix}
-        {dropdown && <ChevronDown className="size-4 text-muted-foreground" />}
-      </span>
+      {suffixNode ?? (
+        <span className={`flex min-w-[3.25rem] shrink-0 items-center justify-end gap-1 font-semibold text-ink ${suffixSizeClass}`}>
+          {suffix}
+          {dropdown && <ChevronDown className="size-3.5 text-muted-foreground" />}
+        </span>
+      )}
       {hasSteppers && (
         <button
           aria-label={`增加${stepTarget}`}
@@ -1363,7 +1732,7 @@ function TradeInput({
           onClick={onStepUp}
           type="button"
         >
-          <Plus className="size-3.5" />
+          {dense ? '＋' : <Plus className="size-3.5" />}
         </button>
       )}
     </div>
@@ -1452,95 +1821,32 @@ function PercentRail({ compact = false, resetKey, onPercentChange }: { compact?:
   );
 }
 
-function CheckRow({ label }: { label: string }) {
-  const [checked, setChecked] = useState(false);
+function CheckRow({
+  label,
+  compact = false,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  compact?: boolean;
+  checked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+}) {
+  const [internalChecked, setInternalChecked] = useState(false);
+  const isChecked = checked ?? internalChecked;
+  const updateChecked = (nextChecked: boolean) => {
+    if (checked === undefined) setInternalChecked(nextChecked);
+    onCheckedChange?.(nextChecked);
+  };
 
   return (
-    <label className="flex items-center gap-2.5 text-[0.96rem] text-ink">
-      <input className="sr-only" type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} />
-      <span className={`grid size-[1.15rem] place-items-center rounded border ${checked ? 'border-brand bg-brand' : 'border-line bg-base2'}`}>
-        {checked && <span className="size-2 rounded-full bg-primary-foreground" />}
+    <label className={`flex items-center gap-2 text-ink ${compact ? 'text-[0.72rem]' : 'text-[0.96rem]'}`}>
+      <input className="sr-only" type="checkbox" checked={isChecked} onChange={(event) => updateChecked(event.target.checked)} />
+      <span className={`grid place-items-center rounded border ${compact ? 'size-3.5' : 'size-[1.15rem]'} ${isChecked ? 'border-brand bg-brand' : 'border-line bg-base2'}`}>
+        {isChecked && <span className={`${compact ? 'size-1.5' : 'size-2'} rounded-full bg-primary-foreground`} />}
       </span>
       {label}
     </label>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-muted-foreground">{label} <span className="text-ink tabular-nums">{value}</span></p>
-    </div>
-  );
-}
-
-function OrderBook({ mode, base = 'BTC', ticker }: { mode: TradeMode; base?: string; ticker?: TradeTicker }) {
-  const currentSymbol = useTradeStore((state) => state.currentSymbol);
-  const [activeTab, setActiveTab] = useState<OrderBookTab>('book');
-  const [depthView, setDepthView] = useState<DepthViewMode>('both');
-  const isContract = mode === 'contract';
-
-  const { data: spotDepth, isLoading: spotDepthLoading } = useSpotDepth(currentSymbol, 20, !isContract);
-  const { data: futuresDepth, isLoading: futuresDepthLoading } = useFuturesDepth(currentSymbol, 20, isContract);
-  const { data: spotTrades = [], isLoading: spotTradesLoading } = useSpotTrades(currentSymbol, 50, activeTab === 'trades' && !isContract);
-  const { data: futuresTrades = [], isLoading: futuresTradesLoading } = useFuturesTrades(currentSymbol, 50, activeTab === 'trades' && isContract);
-  const depth = isContract ? futuresDepth : spotDepth;
-  const isLoading = isContract ? futuresDepthLoading : spotDepthLoading;
-  const trades = isContract ? futuresTrades : spotTrades;
-  const tradesLoading = isContract ? futuresTradesLoading : spotTradesLoading;
-
-  const sellRows = (depth?.asks ?? []).slice(0, depthView === 'both' ? 5 : 10).map(formatDepthRow);
-
-  const buyRows = (depth?.bids ?? []).slice(0, depthView === 'both' ? 5 : 10).map(formatDepthRow);
-
-  const maxAmount = Math.max(0, ...sellRows.concat(buyRows).map((row) => row.quantity));
-
-  return (
-    <div className="min-w-0">
-      <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as OrderBookTab)} className="min-w-0 flex-1 gap-0">
-          <TabsList variant="line" className="no-scrollbar flex !h-6 min-w-0 justify-start gap-3 overflow-x-auto whitespace-nowrap p-0 text-[0.84rem] font-semibold leading-none">
-            <TabsTrigger
-              value="book"
-              className="!h-6 flex-none shrink-0 rounded-none border-0 bg-transparent px-0 pb-1 pt-0 text-muted-foreground shadow-none after:!bottom-0 after:bg-warning data-[state=active]:bg-transparent data-[state=active]:text-ink dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-ink"
-            >
-              盘口
-            </TabsTrigger>
-            <TabsTrigger
-              value="trades"
-              className="!h-6 flex-none shrink-0 rounded-none border-0 bg-transparent px-0 pb-1 pt-0 text-muted-foreground shadow-none after:!bottom-0 after:bg-warning data-[state=active]:bg-transparent data-[state=active]:text-ink dark:data-[state=active]:bg-transparent dark:data-[state=active]:text-ink"
-            >
-              最新成交
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {activeTab === 'book' && (
-          <div className="flex shrink-0 items-center gap-1">
-            <div className="flex h-6 items-center overflow-hidden rounded border border-line bg-base2">
-              <DepthViewButton mode="both" activeMode={depthView} label="买盘+卖盘" onSelect={setDepthView} />
-              <DepthViewButton mode="buy" activeMode={depthView} label="买盘" onSelect={setDepthView} />
-              <DepthViewButton mode="sell" activeMode={depthView} label="卖盘" onSelect={setDepthView} />
-            </div>
-          </div>
-        )}
-      </div>
-      {activeTab === 'book' ? (
-        <>
-          <div className="grid grid-cols-2 gap-2 px-1 text-[0.68rem] text-muted-foreground">
-            <span>价(USDT)</span>
-            <span className="text-right">量({base})</span>
-          </div>
-          {depthView !== 'buy' && <DepthRows rows={sellRows} side="sell" maxAmount={maxAmount} isLoading={isLoading} />}
-          <div className="my-2.5 flex items-baseline justify-between border-y border-line/70 py-2">
-            <span className={`font-mono text-[1.06rem] font-bold tabular-nums ${getChangeClass(ticker?.change)}`}>{ticker?.price ?? '--'}</span>
-            <span className="font-mono text-[0.72rem] text-muted-foreground tabular-nums">≈ {ticker?.fiat ?? '--'}</span>
-          </div>
-          {depthView !== 'sell' && <DepthRows rows={buyRows} side="buy" maxAmount={maxAmount} isLoading={isLoading} />}
-        </>
-      ) : (
-        <LatestTrades trades={trades} base={base} isLoading={tradesLoading} />
-      )}
-    </div>
   );
 }
 
@@ -1591,9 +1897,9 @@ function DepthRows({
   return (
     <div className={`${side === 'sell' ? 'mt-1.5' : ''} space-y-0.5 font-mono`}>
       {rows.length > 0 ? (
-        rows.map((row) => (
+        rows.map((row, rowIndex) => (
           <DepthRow
-            key={`${side}-${row.price}`}
+            key={`${side}-${row.price}-${rowIndex}`}
             price={row.price}
             amount={row.amount}
             quantity={row.quantity}
@@ -1802,17 +2108,27 @@ function MarketPicker({
   );
 }
 
-function CurrentOrders({ symbol }: { symbol?: string }) {
+function CurrentOrders({ mode = 'spot', symbol }: { mode?: TradeMode; symbol?: string }) {
   const [activeTab, setActiveTab] = useState<'open' | 'history'>('open');
   const [selectedOrderNo, setSelectedOrderNo] = useState<string | null>(null);
   const isLogin = useAuthStore((state) => state.isLogin);
+  const isContract = mode === 'contract';
   const queryEnabled = Boolean(symbol) && isLogin;
-  const { data: openOrders = [], isLoading: openLoading } = useSpotOpenOrders(symbol ?? '', queryEnabled && activeTab === 'open');
-  const { data: historyPage, isLoading: historyLoading } = useSpotOrderHistory(symbol ?? '', queryEnabled && activeTab === 'history');
-  const { data: orderDetail, isLoading: detailLoading } = useSpotOrderDetail(selectedOrderNo, Boolean(selectedOrderNo));
+  const { data: spotOpenOrders = [], isLoading: spotOpenLoading } = useSpotOpenOrders(symbol ?? '', queryEnabled && !isContract && activeTab === 'open');
+  const { data: spotHistoryPage, isLoading: spotHistoryLoading } = useSpotOrderHistory(symbol ?? '', queryEnabled && !isContract && activeTab === 'history');
+  const { data: futuresOpenOrders = [], isLoading: futuresOpenLoading } = useFuturesOpenOrders(symbol ?? '', queryEnabled && isContract && activeTab === 'open');
+  const { data: futuresHistoryPage, isLoading: futuresHistoryLoading } = useFuturesOrderHistory(symbol ?? '', queryEnabled && isContract && activeTab === 'history');
+  const { data: spotOrderDetail, isLoading: spotDetailLoading } = useSpotOrderDetail(selectedOrderNo, Boolean(selectedOrderNo) && !isContract);
+  const { data: futuresOrderDetail, isLoading: futuresDetailLoading } = useFuturesOrderDetail(selectedOrderNo, Boolean(selectedOrderNo) && isContract);
   const cancelOrder = useCancelSpotOrder();
-  const rows = activeTab === 'open' ? openOrders : historyPage?.list ?? [];
-  const isLoading = activeTab === 'open' ? openLoading : historyLoading;
+  const rows = isContract
+    ? activeTab === 'open' ? futuresOpenOrders : futuresHistoryPage?.list ?? []
+    : activeTab === 'open' ? spotOpenOrders : spotHistoryPage?.list ?? [];
+  const isLoading = isContract
+    ? activeTab === 'open' ? futuresOpenLoading : futuresHistoryLoading
+    : activeTab === 'open' ? spotOpenLoading : spotHistoryLoading;
+  const orderDetail = isContract ? futuresOrderDetail : spotOrderDetail;
+  const detailLoading = isContract ? futuresDetailLoading : spotDetailLoading;
 
   const cancelSelectedOrder = (orderNo: string) => {
     cancelOrder.mutate({ orderNo, remark: '用户主动撤单' });
@@ -1836,7 +2152,9 @@ function CurrentOrders({ symbol }: { symbol?: string }) {
         <div className="grid min-h-[70px] place-items-center text-muted-foreground">
           <div className="text-center">
             <WalletCards className="mx-auto mb-1.5 size-6" />
-            <p className="text-[0.78rem]">{!isLogin ? '请先登录查看委托' : symbol ? '暂无订单' : '暂无现货订单'}</p>
+            <p className="text-[0.78rem]">
+              {!isLogin ? '请先登录查看委托' : isContract ? '暂无合约委托' : symbol ? '暂无订单' : '暂无现货订单'}
+            </p>
           </div>
         </div>
       ) : (
@@ -1848,7 +2166,7 @@ function CurrentOrders({ symbol }: { symbol?: string }) {
               onCancel={cancelSelectedOrder}
               onOpenDetail={setSelectedOrderNo}
               order={order}
-              showCancel={activeTab === 'open'}
+              showCancel={!isContract && activeTab === 'open'}
             />
           ))}
         </div>
@@ -1873,7 +2191,7 @@ function OrderRow({
   onCancel,
   onOpenDetail,
 }: {
-  order: SpotOrder;
+  order: SpotOrder | FuturesOrder;
   showCancel: boolean;
   cancelPending: boolean;
   onCancel: (orderNo: string) => void;
@@ -1881,6 +2199,7 @@ function OrderRow({
 }) {
   const sideClass = order.side === 'BUY' ? 'text-buy' : 'text-sell';
   const canCancel = showCancel && !isFinalOrderStatus(order.orderStatus);
+  const isFutures = isFuturesOrder(order);
 
   return (
     <div className="rounded-md border border-line bg-base2/45 px-3 py-2.5">
@@ -1891,7 +2210,9 @@ function OrderRow({
             <p className="mt-1 text-[0.68rem] text-muted-foreground">{formatOrderTime(order.submitTime ?? order.createTime)}</p>
           </div>
           <div className="shrink-0 text-right">
-            <p className={`text-[0.78rem] font-semibold ${sideClass}`}>{formatOrderSide(order.side)} · {formatOrderType(order.orderType)}</p>
+            <p className={`text-[0.78rem] font-semibold ${sideClass}`}>
+              {isFutures ? formatFuturesTradeAction(order.tradeAction) : formatOrderSide(order.side)} · {formatOrderType(order.orderType)}
+            </p>
             <p className="mt-1 text-[0.68rem] text-muted-foreground">{formatOrderStatus(order.orderStatus)}</p>
           </div>
         </div>
@@ -1899,6 +2220,13 @@ function OrderRow({
           <OrderMetric label="价格" value={formatDecimalDisplay(order.price)} />
           <OrderMetric label="数量" value={formatDecimalDisplay(order.quantity)} />
           <OrderMetric label="成交" value={formatDecimalDisplay(order.executedQuantity)} />
+          {isFutures && (
+            <>
+              <OrderMetric label="保证金" value={formatDecimalDisplay(order.frozenMargin)} />
+              <OrderMetric label="PnL" value={formatDecimalDisplay(order.realizedPnl)} />
+              <OrderMetric label="杠杆" value={order.leverage ? `${order.leverage}x` : '--'} />
+            </>
+          )}
         </div>
       </button>
       {canCancel && (
@@ -1931,7 +2259,7 @@ function OrderDetailDrawer({
   onOpenChange,
 }: {
   open: boolean;
-  order?: SpotOrder;
+  order?: SpotOrder | FuturesOrder;
   loading: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -1952,23 +2280,55 @@ function OrderDetailDrawer({
           <div className="space-y-3 overflow-y-auto px-4 py-4 text-[0.8rem]">
             <DetailLine label="订单号" value={order.orderNo} />
             <DetailLine label="交易对" value={symbolFormat.normalize(order.symbolCode)} />
-            <DetailLine label="方向/类型" value={`${formatOrderSide(order.side)} · ${formatOrderType(order.orderType)}`} />
-            <DetailLine label="状态" value={formatOrderStatus(order.orderStatus)} />
-            <DetailLine label="委托价格" value={formatDecimalDisplay(order.price)} />
-            <DetailLine label="委托数量" value={formatDecimalDisplay(order.quantity)} />
-            <DetailLine label="委托金额" value={formatDecimalDisplay(order.quoteAmount)} />
-            <DetailLine label="成交数量" value={formatDecimalDisplay(order.executedQuantity)} />
-            <DetailLine label="成交金额" value={formatDecimalDisplay(order.executedQuoteAmount)} />
-            <DetailLine label="成交均价" value={formatDecimalDisplay(order.avgPrice)} />
-            <DetailLine label="手续费" value={`${formatDecimalDisplay(order.feeAmount)} ${order.feeCoinCode ?? ''}`.trim()} />
-            <DetailLine label="冻结" value={`${formatDecimalDisplay(order.frozenAmount)} ${order.frozenCoinCode ?? ''}`.trim()} />
-            <DetailLine label="提交时间" value={formatOrderTime(order.submitTime ?? order.createTime)} />
-            <DetailLine label="完成时间" value={formatOrderTime(order.finishTime)} />
-            {order.cancelReason && <DetailLine label="原因" value={order.cancelReason} />}
+            {isFuturesOrder(order) ? (
+              <FuturesOrderDetailLines order={order} />
+            ) : (
+              <SpotOrderDetailLines order={order} />
+            )}
           </div>
         )}
       </DrawerContent>
     </Drawer>
+  );
+}
+
+function SpotOrderDetailLines({ order }: { order: SpotOrder }) {
+  return (
+    <>
+      <DetailLine label="方向/类型" value={`${formatOrderSide(order.side)} · ${formatOrderType(order.orderType)}`} />
+      <DetailLine label="状态" value={formatOrderStatus(order.orderStatus)} />
+      <DetailLine label="委托价格" value={formatDecimalDisplay(order.price)} />
+      <DetailLine label="委托数量" value={formatDecimalDisplay(order.quantity)} />
+      <DetailLine label="委托金额" value={formatDecimalDisplay(order.quoteAmount)} />
+      <DetailLine label="成交数量" value={formatDecimalDisplay(order.executedQuantity)} />
+      <DetailLine label="成交金额" value={formatDecimalDisplay(order.executedQuoteAmount)} />
+      <DetailLine label="成交均价" value={formatDecimalDisplay(order.avgPrice)} />
+      <DetailLine label="手续费" value={`${formatDecimalDisplay(order.feeAmount)} ${order.feeCoinCode ?? ''}`.trim()} />
+      <DetailLine label="冻结" value={`${formatDecimalDisplay(order.frozenAmount)} ${order.frozenCoinCode ?? ''}`.trim()} />
+      <DetailLine label="提交时间" value={formatOrderTime(order.submitTime ?? order.createTime)} />
+      <DetailLine label="完成时间" value={formatOrderTime(order.finishTime)} />
+      {order.cancelReason && <DetailLine label="原因" value={order.cancelReason} />}
+    </>
+  );
+}
+
+function FuturesOrderDetailLines({ order }: { order: FuturesOrder }) {
+  return (
+    <>
+      <DetailLine label="方向/类型" value={`${formatFuturesTradeAction(order.tradeAction)} · ${formatOrderType(order.orderType)}`} />
+      <DetailLine label="状态" value={formatOrderStatus(order.orderStatus)} />
+      <DetailLine label="仓位方向" value={`${formatPositionSide(order.positionSide)} · ${order.leverage ? `${order.leverage}x` : '--'}`} />
+      <DetailLine label="委托价格" value={formatDecimalDisplay(order.price)} />
+      <DetailLine label="委托数量" value={formatDecimalDisplay(order.quantity)} />
+      <DetailLine label="成交数量" value={formatDecimalDisplay(order.executedQuantity)} />
+      <DetailLine label="成交均价" value={formatDecimalDisplay(order.avgPrice)} />
+      <DetailLine label="冻结保证金" value={formatDecimalDisplay(order.frozenMargin)} />
+      <DetailLine label="已实现盈亏" value={formatDecimalDisplay(order.realizedPnl)} />
+      <DetailLine label="手续费" value={formatDecimalDisplay(order.feeAmount)} />
+      <DetailLine label="提交时间" value={formatOrderTime(order.submitTime ?? order.createTime)} />
+      <DetailLine label="完成时间" value={formatOrderTime(order.finishTime)} />
+      {order.cancelReason && <DetailLine label="原因" value={order.cancelReason} />}
+    </>
   );
 }
 
@@ -2032,6 +2392,43 @@ function getSpotOrderRule(
   };
 }
 
+function getFuturesBalance(assets: AccountAsset[], marginCoin: string): FuturesOrderBalance | undefined {
+  const asset = assets.find((item) => item.coinCode === marginCoin);
+  if (!asset) return undefined;
+
+  return {
+    coinCode: asset.coinCode,
+    availableBalance: toRuleDecimal(asset.availableBalance) || '0',
+  };
+}
+
+function getFuturesOrderRule(tradeConfig: FuturesTradeConfig | undefined): FuturesOrderRule | undefined {
+  if (!tradeConfig?.futuresRule) return undefined;
+  const futuresRule = tradeConfig.futuresRule;
+
+  return {
+    futuresTradable: tradeConfig.futuresTradable,
+    minPrice: toRuleDecimal(futuresRule.minPrice),
+    maxPrice: toRuleDecimal(futuresRule.maxPrice),
+    tickSize: toRuleDecimal(futuresRule.tickSize),
+    minQty: toRuleDecimal(futuresRule.minQty),
+    maxQty: toRuleDecimal(futuresRule.maxQty),
+    stepSize: toRuleDecimal(futuresRule.stepSize),
+    minNotional: toRuleDecimal(futuresRule.minNotional),
+  };
+}
+
+function getFuturesMaxOpenQuantity(availableBalance: string, price: string, leverage: number): string {
+  if (!availableBalance || !price) return '0';
+
+  return divideDecimalStrings(multiplyDecimalStrings(availableBalance, String(leverage)), price, 18) || '0';
+}
+
+function normalizeQuantityToDisplayStep(quantity: string, step?: string): string {
+  if (!step) return quantity || '0';
+  return floorDecimalToStep(quantity, step) || '0';
+}
+
 function getEstimatedSpotFee({
   side,
   isLimitOrder,
@@ -2087,6 +2484,10 @@ function isFinalOrderStatus(status: number): boolean {
   return [3, 4, 5, 6].includes(status);
 }
 
+function isFuturesOrder(order: SpotOrder | FuturesOrder): order is FuturesOrder {
+  return 'tradeAction' in order;
+}
+
 function formatOrderSide(side: string): string {
   if (side === 'BUY') return '买入';
   if (side === 'SELL') return '卖出';
@@ -2108,9 +2509,27 @@ function formatOrderStatus(status: number): string {
     4: '已撤单',
     5: '已拒绝',
     6: '已过期',
+    7: '已触发待成交',
   };
 
   return statusMap[status] ?? `状态 ${status}`;
+}
+
+function formatFuturesTradeAction(action: string): string {
+  const actionMap: Record<string, string> = {
+    OPEN_LONG: '开多',
+    OPEN_SHORT: '开空',
+    CLOSE_LONG: '平多',
+    CLOSE_SHORT: '平空',
+  };
+
+  return actionMap[action] ?? (action || '--');
+}
+
+function formatPositionSide(positionSide: string): string {
+  if (positionSide === 'LONG') return '多仓';
+  if (positionSide === 'SHORT') return '空仓';
+  return positionSide || '--';
 }
 
 function formatOrderTime(value?: string | null): string {
@@ -2126,7 +2545,7 @@ function toDecimalInput(value: string): string {
 }
 
 function toRuleDecimal(value?: number): string {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return '';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
 
   const raw = String(value);
   if (!raw.includes('e')) return normalizeDecimalInput(raw);

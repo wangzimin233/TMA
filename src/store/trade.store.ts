@@ -4,7 +4,7 @@ import type { SpotKlineParams, TradeMode } from '../types/app';
 type TradeState = {
   currentSymbol: string;
   currentInterval: SpotKlineParams['interval'];
-  selectedLeverage: number;
+  selectedLeverage: number | null;
   tradeMode: TradeMode;
   showChart: boolean;
   setCurrentSymbol: (symbol: string) => void;
@@ -17,7 +17,7 @@ type TradeState = {
 export const useTradeStore = create<TradeState>((set) => ({
   currentSymbol: '',
   currentInterval: '15m',
-  selectedLeverage: 10,
+  selectedLeverage: null,
   tradeMode: 'spot',
   showChart: true,
   setCurrentSymbol: (currentSymbol) => set({ currentSymbol }),
