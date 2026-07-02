@@ -12,7 +12,7 @@ import { useTradeStore } from '../../store/trade.store';
 import { useAuthStore } from '../../store/auth.store';
 import type { FuturesDepthLevel, FuturesMarkPrice, FuturesSummary, FuturesTrade, SpotDepthLevel, SpotKlineParams, SpotSummary, SpotTrade, TradeMode } from '../../types/app';
 import { useCancelSpotOrder, usePlaceSpotOrder, useSpotFavoriteStatus, useToggleSpotFavorite, useSpotSummary, useInfiniteSpotKlines, useSpotDepth, useSpotExchangeInfo, useSpotFavorites, useSpotMarketList, useSpotOpenOrders, useSpotOrderDetail, useSpotOrderHistory, useSpotTradeConfig, useSpotTrades } from '../../hooks/useSpotQueries';
-import { useFuturesDepth, useFuturesMarkPrice, useFuturesMarketList, useFuturesOpenOrders, useFuturesOrderDetail, useFuturesOrderHistory, useFuturesPositions, useFuturesSummary, useFuturesTradeConfig, useFuturesTrades, useInfiniteFuturesKlines, usePlaceFuturesOrder } from '../../hooks/useFuturesQueries';
+import { useCancelFuturesOrder, useFuturesDepth, useFuturesMarkPrice, useFuturesMarketList, useFuturesOpenOrders, useFuturesOrderDetail, useFuturesOrderHistory, useFuturesPositions, useFuturesSummary, useFuturesTradeConfig, useFuturesTrades, useInfiniteFuturesKlines, usePlaceFuturesOrder } from '../../hooks/useFuturesQueries';
 import { useAccountAssets } from '../../hooks/useAccountQueries';
 import { addDecimalStrings, divideDecimalStrings, floorDecimalAtZero, floorDecimalToStep, formatDecimalToPrecision, multiplyDecimalStrings, normalizeDecimalInput, subtractDecimalStrings } from '../../lib/decimal';
 import { buildSpotOrderPayload, getSpotOrderValidation, type SpotOrderBalance, type SpotOrderRule } from '../../lib/spot-order';
@@ -1114,7 +1114,10 @@ function ContractOrderForm({
   const [showTimeInForceDrawer, setShowTimeInForceDrawer] = useState(false);
   const isAuthenticated = useAuthStore((state) => state.isLogin);
   const { data: accountAssets = [] } = useAccountAssets('FUTURES', isAuthenticated);
-  const { data: futuresPositions = [] } = useFuturesPositions(symbol, isAuthenticated);
+  const { data: futuresPositions = [] } = useFuturesPositions(symbol, isAuthenticated, {
+    refetchInterval: 3000,
+    staleTime: 3000,
+  });
   const placeOrder = usePlaceFuturesOrder();
   const isLimitOrder = orderType === 'limit';
   const marketPlaceholder = positionMode === 'open' ? '市价开仓' : '市价平仓';
@@ -2116,11 +2119,16 @@ function CurrentOrders({ mode = 'spot', symbol }: { mode?: TradeMode; symbol?: s
   const queryEnabled = Boolean(symbol) && isLogin;
   const { data: spotOpenOrders = [], isLoading: spotOpenLoading } = useSpotOpenOrders(symbol ?? '', queryEnabled && !isContract && activeTab === 'open');
   const { data: spotHistoryPage, isLoading: spotHistoryLoading } = useSpotOrderHistory(symbol ?? '', queryEnabled && !isContract && activeTab === 'history');
-  const { data: futuresOpenOrders = [], isLoading: futuresOpenLoading } = useFuturesOpenOrders(symbol ?? '', queryEnabled && isContract && activeTab === 'open');
+  const { data: futuresOpenOrders = [], isLoading: futuresOpenLoading } = useFuturesOpenOrders(symbol ?? '', queryEnabled && isContract && activeTab === 'open', {
+    refetchInterval: 3000,
+    staleTime: 3000,
+  });
   const { data: futuresHistoryPage, isLoading: futuresHistoryLoading } = useFuturesOrderHistory(symbol ?? '', queryEnabled && isContract && activeTab === 'history');
   const { data: spotOrderDetail, isLoading: spotDetailLoading } = useSpotOrderDetail(selectedOrderNo, Boolean(selectedOrderNo) && !isContract);
   const { data: futuresOrderDetail, isLoading: futuresDetailLoading } = useFuturesOrderDetail(selectedOrderNo, Boolean(selectedOrderNo) && isContract);
-  const cancelOrder = useCancelSpotOrder();
+  const spotCancelOrder = useCancelSpotOrder();
+  const futuresCancelOrder = useCancelFuturesOrder();
+  const cancelOrder = isContract ? futuresCancelOrder : spotCancelOrder;
   const rows = isContract
     ? activeTab === 'open' ? futuresOpenOrders : futuresHistoryPage?.list ?? []
     : activeTab === 'open' ? spotOpenOrders : spotHistoryPage?.list ?? [];
@@ -2166,7 +2174,7 @@ function CurrentOrders({ mode = 'spot', symbol }: { mode?: TradeMode; symbol?: s
               onCancel={cancelSelectedOrder}
               onOpenDetail={setSelectedOrderNo}
               order={order}
-              showCancel={!isContract && activeTab === 'open'}
+              showCancel={activeTab === 'open'}
             />
           ))}
         </div>

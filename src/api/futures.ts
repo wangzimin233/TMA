@@ -125,6 +125,11 @@ export type FuturesOrderHistoryParams = {
   orderStatus?: FuturesOrderStatus;
 };
 
+export type FuturesCancelOrderPayload = {
+  orderNo: string;
+  remark?: string;
+};
+
 export type PageResult<T> = {
   list: T[];
   total: number;
@@ -173,6 +178,10 @@ export const futuresApi = {
 
   placeFuturesOrder: (payload: FuturesPlaceOrderPayload) => {
     return requestData(apiClient.post<ApiResult<FuturesPlaceOrderResponse>>('/api/trade/futures/order/place', payload));
+  },
+
+  cancelFuturesOrder: (payload: FuturesCancelOrderPayload) => {
+    return requestData(apiClient.post<ApiResult<FuturesOrder>>('/api/trade/futures/order/cancel', payload));
   },
 
   getOpenOrders: (symbolCode?: string) => {

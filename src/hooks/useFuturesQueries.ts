@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { InfiniteData } from '@tanstack/react-query';
+import type { InfiniteData, UseQueryOptions } from '@tanstack/react-query';
 import { futuresApi } from '../api/futures';
-import type { FuturesOrderHistoryParams } from '../api/futures';
+import type { FuturesCancelOrderPayload, FuturesOrderHistoryParams } from '../api/futures';
 import type { FuturesKline, FuturesKlineParams, FuturesMarketListParams } from '../types/app';
 import { symbolFormat } from '../lib/utils';
 import { accountQueryKeys } from './useAccountQueries';
@@ -20,6 +20,16 @@ export const futuresPositionQueryKeys = {
   root: ['futures', 'positions'] as const,
   list: (symbolCode?: string) => ['futures', 'positions', symbolCode ?? 'ALL'] as const,
 };
+
+export type FuturesPositionsQueryOptions = Pick<
+  UseQueryOptions<Awaited<ReturnType<typeof futuresApi.getPositions>>, Error>,
+  'refetchInterval' | 'refetchIntervalInBackground' | 'staleTime'
+>;
+
+export type FuturesOpenOrdersQueryOptions = Pick<
+  UseQueryOptions<Awaited<ReturnType<typeof futuresApi.getOpenOrders>>, Error>,
+  'refetchInterval' | 'refetchIntervalInBackground' | 'staleTime'
+>;
 
 export function useFuturesSymbols() {
   return useQuery({
@@ -134,7 +144,7 @@ export function useFuturesTradeConfig(symbol: string, enabled = true) {
   });
 }
 
-export function useFuturesPositions(symbol: string, enabled = true) {
+export function useFuturesPositions(symbol: string, enabled = true, options?: FuturesPositionsQueryOptions) {
   const symbolCode = symbolFormat.toApi(symbol);
 
   return useQuery({
@@ -142,10 +152,11 @@ export function useFuturesPositions(symbol: string, enabled = true) {
     queryFn: () => futuresApi.getPositions(symbolCode),
     enabled: enabled && !!symbol,
     staleTime: 10_000,
+    ...options,
   });
 }
 
-export function useFuturesOpenOrders(symbol: string, enabled = true) {
+export function useFuturesOpenOrders(symbol: string, enabled = true, options?: FuturesOpenOrdersQueryOptions) {
   const symbolCode = symbolFormat.toApi(symbol);
 
   return useQuery({
@@ -153,6 +164,7 @@ export function useFuturesOpenOrders(symbol: string, enabled = true) {
     queryFn: () => futuresApi.getOpenOrders(symbolCode),
     enabled: enabled && !!symbol,
     staleTime: 10_000,
+    ...options,
   });
 }
 
@@ -182,11 +194,30 @@ export function usePlaceFuturesOrder() {
 
   return useMutation({
     mutationFn: (payload: FuturesPlaceOrderPayload) => futuresApi.placeFuturesOrder(payload),
+    onSuccess: (_data, payload) => {
+      queryClient.invalidateQueries({ queryKey: accountQueryKeys.root });
+      queryClient.invalidateQueries({ queryKey: futuresOrderQueryKeys.root });
+      queryClient.invalidateQueries({ queryKey: futuresPositionQueryKeys.root });
+      queryClient.refetchQueries({ queryKey: futuresPositionQueryKeys.list(payload.symbolCode) });
+      queryClient.refetchQueries({ queryKey: futuresOrderQueryKeys.open(payload.symbolCode) });
+      toast.success('合约下单成功');
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+}
+
+export function useCancelFuturesOrder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: FuturesCancelOrderPayload) => futuresApi.cancelFuturesOrder(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: accountQueryKeys.root });
       queryClient.invalidateQueries({ queryKey: futuresOrderQueryKeys.root });
       queryClient.invalidateQueries({ queryKey: futuresPositionQueryKeys.root });
-      toast.success('合约下单成功');
+      toast.success('撤单成功');
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));
