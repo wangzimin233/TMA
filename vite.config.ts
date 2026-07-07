@@ -13,9 +13,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    allowedHosts: ['go4700yx403.aicp.io'],
     proxy: {
       '/api': {
-        target: 'http://192.168.100.10:8080',
+        target: 'http://192.168.100.11:8080',
         changeOrigin: true,
       },
     },

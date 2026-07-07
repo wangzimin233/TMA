@@ -47,7 +47,6 @@ export type RegisterByEmailPayload = {
   code: string;
   password: string;
   inviteCode?: string;
-  nickname?: string;
 };
 
 export function sendEmailCode(payload: SendEmailCodePayload) {

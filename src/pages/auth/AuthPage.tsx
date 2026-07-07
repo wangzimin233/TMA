@@ -23,7 +23,6 @@ type AuthFormValues = {
   password: string;
   code: string;
   inviteCode: string;
-  nickname: string;
 };
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -49,7 +48,6 @@ export function AuthPage({ onBack, onSuccess }: { onBack: () => void; onSuccess:
       password: '',
       code: '',
       inviteCode: '',
-      nickname: '',
     },
   });
 
@@ -128,7 +126,6 @@ export function AuthPage({ onBack, onSuccess }: { onBack: () => void; onSuccess:
             code,
             password,
             inviteCode: values.inviteCode.trim() || undefined,
-            nickname: values.nickname.trim() || undefined,
           })
         : await loginByEmail({
             email,
@@ -273,14 +270,7 @@ export function AuthPage({ onBack, onSuccess }: { onBack: () => void; onSuccess:
             )}
 
             {isRegister && (
-              <div className="grid grid-cols-2 gap-2.5">
-                <Field label="昵称" optional>
-                  <Input
-                    className="h-10 rounded-md border-line bg-base2 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
-                    placeholder="可选"
-                    {...register('nickname')}
-                  />
-                </Field>
+              <div>
                 <Field label="邀请码" optional>
                   <Input
                     className="h-10 rounded-md border-line bg-base2 text-[0.88rem] text-ink placeholder:text-muted-foreground focus-visible:ring-brand/20"
