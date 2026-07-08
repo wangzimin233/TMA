@@ -21,7 +21,7 @@ import { formatFuturesFundingRate, formatFuturesFundingTime, formatNullableMarke
 import { symbolFormat } from '../../lib/utils';
 import type { AccountAsset, AccountType } from '../../api/account';
 import type { SpotOrder, SpotTradeConfig } from '../../api/spot';
-import type { FuturesOrder, FuturesTradeConfig } from '../../api/futures';
+import type { FuturesOrder, FuturesPosition, FuturesTradeConfig } from '../../api/futures';
 
 const KLINE_INTERVALS: SpotKlineParams['interval'][] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
 const KLINE_PAGE_LIMIT = 500;
@@ -34,6 +34,7 @@ type DepthViewMode = 'both' | 'buy' | 'sell';
 type TradeContentTab = 'chart' | 'trades' | 'overview';
 type MarketPickerTab = (typeof marketPickerTabs)[number];
 type LimitLinkedField = 'quantity' | 'amount';
+type OrdersTab = 'positions' | 'open' | 'history';
 const contractTimeInForceOptions: Array<{ value: FuturesTimeInForce; label: string; description: string }> = [
   { value: 'GTC', label: 'GTC', description: '取消前有效' },
   { value: 'IOC', label: 'IOC', description: '立即成交否则取消' },
@@ -2033,10 +2034,10 @@ function MarketPicker({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="bottom">
-      <DrawerContent className="max-h-[92vh] overflow-hidden rounded-t-xl border-line bg-panel p-0 text-ink shadow-2xl [&>div:first-child]:hidden">
+      <DrawerContent className="h-[82vh] max-h-[92vh] overflow-hidden rounded-t-xl border-line bg-panel p-0 text-ink shadow-2xl data-[vaul-drawer-direction=bottom]:max-h-[92vh] [&>div:first-child]:hidden">
         <div className="relative flex h-14 items-center justify-center border-b border-line">
           <DrawerTitle className="text-[1.08rem] font-semibold text-ink">市场</DrawerTitle>
-          <DrawerClose className="absolute right-4 top-1/2 -translate-y-1/2" aria-label="关闭市场选择">
+          <DrawerClose className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer" aria-label="关闭市场选择">
             <X className="size-6 text-muted-foreground" />
           </DrawerClose>
         </div>
@@ -2075,7 +2076,7 @@ function MarketPicker({
           </div>
         </div>
 
-        <div className="mt-2 max-h-[60vh] overflow-y-auto pb-6">
+        <div className="mt-2 min-h-0 flex-1 overflow-y-auto pb-6">
           {isLoading ? (
             <div className="py-12 text-center text-[0.82rem] text-muted-foreground">加载中...</div>
           ) : rows.length === 0 ? (
@@ -2086,7 +2087,7 @@ function MarketPicker({
             return (
               <button
                 key={row.symbolCode}
-                className={`grid w-full grid-cols-[minmax(0,1fr)_128px] items-center px-4 py-3 text-left ${active ? 'bg-white/[0.035]' : ''}`}
+                className={`grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_128px] items-center px-4 py-3 text-left ${active ? 'bg-white/[0.035]' : ''}`}
                 onClick={() => onSelect(symbol)}
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -2112,13 +2113,17 @@ function MarketPicker({
 }
 
 function CurrentOrders({ mode = 'spot', symbol }: { mode?: TradeMode; symbol?: string }) {
-  const [activeTab, setActiveTab] = useState<'open' | 'history'>('open');
+  const [activeTab, setActiveTab] = useState<OrdersTab>('open');
   const [selectedOrderNo, setSelectedOrderNo] = useState<string | null>(null);
   const isLogin = useAuthStore((state) => state.isLogin);
   const isContract = mode === 'contract';
   const queryEnabled = Boolean(symbol) && isLogin;
   const { data: spotOpenOrders = [], isLoading: spotOpenLoading } = useSpotOpenOrders(symbol ?? '', queryEnabled && !isContract && activeTab === 'open');
   const { data: spotHistoryPage, isLoading: spotHistoryLoading } = useSpotOrderHistory(symbol ?? '', queryEnabled && !isContract && activeTab === 'history');
+  const { data: futuresPositions = [], isLoading: futuresPositionsLoading } = useFuturesPositions(symbol ?? '', queryEnabled && isContract && activeTab === 'positions', {
+    refetchInterval: 3000,
+    staleTime: 3000,
+  });
   const { data: futuresOpenOrders = [], isLoading: futuresOpenLoading } = useFuturesOpenOrders(symbol ?? '', queryEnabled && isContract && activeTab === 'open', {
     refetchInterval: 3000,
     staleTime: 3000,
@@ -2130,13 +2135,19 @@ function CurrentOrders({ mode = 'spot', symbol }: { mode?: TradeMode; symbol?: s
   const futuresCancelOrder = useCancelFuturesOrder();
   const cancelOrder = isContract ? futuresCancelOrder : spotCancelOrder;
   const rows = isContract
-    ? activeTab === 'open' ? futuresOpenOrders : futuresHistoryPage?.list ?? []
+    ? activeTab === 'positions' ? [] : activeTab === 'open' ? futuresOpenOrders : futuresHistoryPage?.list ?? []
     : activeTab === 'open' ? spotOpenOrders : spotHistoryPage?.list ?? [];
   const isLoading = isContract
-    ? activeTab === 'open' ? futuresOpenLoading : futuresHistoryLoading
+    ? activeTab === 'positions' ? futuresPositionsLoading : activeTab === 'open' ? futuresOpenLoading : futuresHistoryLoading
     : activeTab === 'open' ? spotOpenLoading : spotHistoryLoading;
   const orderDetail = isContract ? futuresOrderDetail : spotOrderDetail;
   const detailLoading = isContract ? futuresDetailLoading : spotDetailLoading;
+
+  useEffect(() => {
+    if (!isContract && activeTab === 'positions') {
+      setActiveTab('open');
+    }
+  }, [activeTab, isContract]);
 
   const cancelSelectedOrder = (orderNo: string) => {
     cancelOrder.mutate({ orderNo, remark: '用户主动撤单' });
@@ -2146,6 +2157,9 @@ function CurrentOrders({ mode = 'spot', symbol }: { mode?: TradeMode; symbol?: s
     <div className="col-span-full -mx-4 mt-5 border-t border-line px-4 py-3.5">
       <div className="flex items-center justify-between">
         <div className="no-scrollbar flex min-w-0 gap-4 overflow-x-auto whitespace-nowrap text-[0.9rem] font-semibold">
+          {isContract && (
+            <button className={`shrink-0 cursor-pointer ${activeTab === 'positions' ? 'text-ink' : 'text-muted-foreground'}`} onClick={() => setActiveTab('positions')} type="button">持有仓位</button>
+          )}
           <button className={`shrink-0 cursor-pointer ${activeTab === 'open' ? 'text-ink' : 'text-muted-foreground'}`} onClick={() => setActiveTab('open')} type="button">当前委托</button>
           <button className={`shrink-0 cursor-pointer ${activeTab === 'history' ? 'text-ink' : 'text-muted-foreground'}`} onClick={() => setActiveTab('history')} type="button">历史委托</button>
         </div>
@@ -2156,6 +2170,21 @@ function CurrentOrders({ mode = 'spot', symbol }: { mode?: TradeMode; symbol?: s
         <div className="grid min-h-[70px] place-items-center text-[0.78rem] text-muted-foreground">
           <span className="inline-flex items-center gap-2"><Loader2 className="size-4 animate-spin" />加载中</span>
         </div>
+      ) : isContract && activeTab === 'positions' ? (
+        futuresPositions.length === 0 ? (
+          <div className="grid min-h-[70px] place-items-center text-muted-foreground">
+            <div className="text-center">
+              <WalletCards className="mx-auto mb-1.5 size-6" />
+              <p className="text-[0.78rem]">{!isLogin ? '请先登录查看仓位' : '暂无持有仓位'}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {futuresPositions.map((position) => (
+              <FuturesPositionRow key={position.positionNo} position={position} />
+            ))}
+          </div>
+        )
       ) : rows.length === 0 ? (
         <div className="grid min-h-[70px] place-items-center text-muted-foreground">
           <div className="text-center">
@@ -2188,6 +2217,45 @@ function CurrentOrders({ mode = 'spot', symbol }: { mode?: TradeMode; symbol?: s
         open={Boolean(selectedOrderNo)}
         order={orderDetail}
       />
+    </div>
+  );
+}
+
+function FuturesPositionRow({ position }: { position: FuturesPosition }) {
+  const pnlClass = getSignedValueClass(position.unrealizedPnl);
+
+  return (
+    <div className="rounded-md border border-line bg-base2/45 px-3 py-2.5">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[0.82rem] font-semibold text-ink">{symbolFormat.normalize(position.symbolCode)}</p>
+          <p className="mt-1 text-[0.68rem] text-muted-foreground">{formatPositionSide(position.positionSide)} · {position.leverage ? `${position.leverage}x` : '--'}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className={`text-[0.78rem] font-semibold ${position.positionSide === 'SHORT' ? 'text-sell' : 'text-buy'}`}>
+            {formatPositionSide(position.positionSide)}
+          </p>
+          <p className="mt-1 text-[0.68rem] text-muted-foreground">{position.marginMode === 'ISOLATED' ? '逐仓' : position.marginMode || '--'}</p>
+        </div>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-[0.68rem]">
+        <PositionMetric label="持仓" value={formatDecimalDisplay(position.positionQty)} />
+        <PositionMetric label="可平" value={formatDecimalDisplay(position.availableQty)} />
+        <PositionMetric label="开仓均价" value={formatDecimalDisplay(position.openAvgPrice)} />
+        <PositionMetric label="标记价" value={formatDecimalDisplay(position.lastMarkPrice)} />
+        <PositionMetric label="保证金" value={formatDecimalDisplay(position.positionMargin)} />
+        <PositionMetric label="强平价" value={formatDecimalDisplay(position.liquidationPrice)} />
+        <PositionMetric label="未实现盈亏" value={formatDecimalDisplay(position.unrealizedPnl)} valueClassName={pnlClass} />
+      </div>
+    </div>
+  );
+}
+
+function PositionMetric({ label, value, valueClassName = 'text-ink' }: { label: string; value: string; valueClassName?: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-muted-foreground">{label}</p>
+      <p className={`mt-1 truncate font-mono tabular-nums ${valueClassName}`}>{value || '--'}</p>
     </div>
   );
 }
@@ -2538,6 +2606,11 @@ function formatPositionSide(positionSide: string): string {
   if (positionSide === 'LONG') return '多仓';
   if (positionSide === 'SHORT') return '空仓';
   return positionSide || '--';
+}
+
+function getSignedValueClass(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return 'text-ink';
+  return value > 0 ? 'text-buy' : 'text-sell';
 }
 
 function formatOrderTime(value?: string | null): string {
